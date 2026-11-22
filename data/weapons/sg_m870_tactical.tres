@@ -1,12 +1,14 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://src/weapons/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="PackedScene" path="res://assets/weapons/spas12/spas12.glb" id="2_spas12"]
 
 [resource]
 script = ExtResource("1_wd")
 weapon_id = &"sg_m870_tactical"
-display_name = "SG-870 Breacher"
+display_name = "SPAS-12"
 visual_preset = 1
+viewmodel_scene = ExtResource("2_spas12")
 accent_color = Color(0.28, 0.22, 0.18, 1)
 base_damage = 18.0
 pellets_per_shot = 8
@@ -52,9 +54,9 @@ viewmodel_kick_pitch_deg = 7.5
 ads_fov = 62.0
 ads_transition_speed = 9.5
 ads_sensitivity_multiplier = 0.72
-hip_position = Vector3(0.25, -0.23, -0.45)
-ads_position = Vector3(0.0, -0.142, -0.36)
-sprint_position = Vector3(0.19, -0.30, -0.38)
+hip_position = Vector3(0.20, -0.18, -0.35)
+ads_position = Vector3(0.0, -0.072, -0.26)
+sprint_position = Vector3(0.16, -0.24, -0.31)
 sprint_rotation_deg = Vector3(-18.0, 28.0, -10.0)
 fire_sound_id = &"shot_shotgun"
 eject_shell_color = Color(0.82, 0.16, 0.14, 1)

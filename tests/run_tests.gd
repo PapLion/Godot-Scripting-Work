@@ -20,6 +20,7 @@ func _run_all() -> void:
 	_test_damage_hitboxes_and_armor()
 	_test_weapon_manager_firing_reloads_and_switching()
 	await _test_training_range_scene_instantiation()
+	await _test_rigged_weapon_models_and_animations()
 
 	print("--------------------------------------------")
 	print("TOTAL: %d passed, %d failed" % [_passed, _failed])
@@ -264,5 +265,49 @@ func _test_training_range_scene_instantiation() -> void:
 	_assert(inst.player.weapon_manager.available_attachments.size() == 4, "Player has all 4 configured attachments available")
 	var targets := get_nodes_in_group("range_targets")
 	_assert(targets.size() == 6, "TrainingRange spawns all 6 practice targets (static, armored, moving)")
+	inst.queue_free()
+	await process_frame
+
+
+func _test_rigged_weapon_models_and_animations() -> void:
+	var scene := load("res://src/showcase/training_range.tscn") as PackedScene
+	var inst := scene.instantiate() as RangeController
+	root.add_child(inst)
+	await process_frame
+
+	var vm := inst.player.camera_rig.viewmodel
+	var wm := inst.player.weapon_manager
+
+	# 1. AK-47 rigged animations
+	var ak_anims := vm.get_animation_names()
+	_assert(
+		ak_anims.has("idle") and ak_anims.has("fire") and ak_anims.has("reload") and ak_anims.has("equip") and ak_anims.has("unequip"),
+		"AK-47 GLB imports with required animations (%s)" % [", ".join(ak_anims)]
+	)
+	wm.get_current_weapon().current_mag = 10
+	wm.request_reload()
+	_assert(vm.get_current_animation() == "reload", "AK-47 plays 'reload' animation on reload start")
+	wm.request_switch_slot(1)
+	_assert(vm.get_current_animation() == "unequip", "Weapon switch interrupts AK-47 reload and plays 'unequip'")
+
+	# 2. SPAS-12 rigged animations + shell-by-shell sync
+	wm._equip_slot_immediate(1)
+	var spas_anims := vm.get_animation_names()
+	_assert(
+		spas_anims.has("idle") and spas_anims.has("fire") and spas_anims.has("shell_start") and spas_anims.has("shell_insert") and spas_anims.has("shell_end") and spas_anims.has("reload_interrupt"),
+		"SPAS-12 GLB imports with shell-by-shell & interrupt animations (%s)" % [", ".join(spas_anims)]
+	)
+	wm.get_current_weapon().current_mag = 2
+	wm.request_reload()
+	_assert(vm.get_current_animation() == "shell_start", "SPAS-12 plays 'shell_start' on shell reload start")
+
+	# 3. AWP rigged animations + bolt-action cycle
+	wm._equip_slot_immediate(2)
+	var awp_anims := vm.get_animation_names()
+	_assert(
+		awp_anims.has("idle") and awp_anims.has("fire") and (awp_anims.has("bolt") or awp_anims.has("bolt_cycle")) and awp_anims.has("reload") and awp_anims.has("equip"),
+		"AWP GLB imports with bolt-action & reload animations (%s)" % [", ".join(awp_anims)]
+	)
+
 	inst.queue_free()
 	await process_frame

@@ -380,20 +380,23 @@ func _run_screenshots_only() -> void:
 		_aim_target = _get_target_point("TargetLong45m", "HeadHitbox")
 		_wm.set_aim_requested(true)
 
-	# 04: Precision rifle high-zoom ADS downrange
+	# 04: Precision rifle high-zoom ADS mil-dot scope + 06: AWP olive-drab 3D hip view
 	if _step_idx == 5 and t >= 4.0:
 		_step_idx = 6
-		_save_shot("04_precision_rifle_ads.png")
+		_save_shot("04_awp_scope_ads.png")
 		_wm.set_aim_requested(false)
+	if _step_idx == 6 and t >= 4.6:
+		_step_idx = 7
+		_save_shot("06_awp_hip_viewmodel.png")
 		_wm._equip_slot_immediate(0)
 		_aim_target = Vector3(11.3, 1.4, -2.0)
 
 	# 05: Multi-surface ballistic impact test wall (Concrete / Steel / Timber)
-	if _step_idx == 6 and t >= 5.0:
-		_step_idx = 7
-		_wm.set_trigger_held(true)
-	if _step_idx == 7 and t >= 5.35:
+	if _step_idx == 7 and t >= 5.3:
 		_step_idx = 8
+		_wm.set_trigger_held(true)
+	if _step_idx == 8 and t >= 5.65:
+		_step_idx = 9
 		_wm.set_trigger_held(false)
 		_save_shot("05_surface_impacts_and_telemetry.png")
 		get_tree().quit(0)

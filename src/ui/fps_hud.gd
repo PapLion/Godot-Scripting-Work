@@ -25,6 +25,7 @@ var _hitmarker_color: Color = Color.WHITE
 var _hitmarker_scale: float = 1.0
 var _spread_pixels: float = 10.0
 var _crosshair_alpha: float = 1.0
+var _sniper_scope_alpha: float = 0.0
 
 
 func _ready() -> void:
@@ -72,6 +73,9 @@ func _process(delta: float) -> void:
 		var spread_deg := _weapon_manager.get_current_spread_deg()
 		_spread_pixels = clampf(5.0 + spread_deg * 8.5, 5.0, 72.0)
 		_crosshair_alpha = lerpf(0.92, 0.22, _weapon_manager.ads_alpha)
+		var cur_w := _weapon_manager.get_current_weapon()
+		var is_sniper := cur_w != null and cur_w.data.visual_preset == WeaponData.VisualPreset.PRECISION_RIFLE
+		_sniper_scope_alpha = clampf((_weapon_manager.ads_alpha - 0.72) / 0.24, 0.0, 1.0) if is_sniper else 0.0
 
 	if _crosshair_control != null:
 		_crosshair_control.queue_redraw()
@@ -353,18 +357,42 @@ func _make_panel() -> PanelContainer:
 
 
 func _draw_crosshair() -> void:
-	var center := _crosshair_control.size * 0.5
-	var col := Color(0.95, 0.98, 1.0, _crosshair_alpha)
-	var gap := _spread_pixels
-	var length := 8.0
-	var width := 2.0
+	var sz := _crosshair_control.size
+	var center := sz * 0.5
 
-	# 4 dynamic spread ticks + subtle center dot
-	_crosshair_control.draw_line(center + Vector2(-gap - length, 0), center + Vector2(-gap, 0), col, width)
-	_crosshair_control.draw_line(center + Vector2(gap, 0), center + Vector2(gap + length, 0), col, width)
-	_crosshair_control.draw_line(center + Vector2(0, -gap - length), center + Vector2(0, -gap), col, width)
-	_crosshair_control.draw_line(center + Vector2(0, gap), center + Vector2(0, gap + length), col, width)
-	_crosshair_control.draw_circle(center, 1.6, Color(0.95, 0.98, 1.0, maxf(0.45, _crosshair_alpha)))
+	# Tactical Mil-Dot Sniper Scope overlay for AWP full ADS
+	if _sniper_scope_alpha > 0.02:
+		var a := _sniper_scope_alpha
+		var radius := minf(sz.x, sz.y) * 0.44
+		var dark := Color(0.02, 0.025, 0.035, 0.96 * a)
+		# Outer black mask bars + ring
+		_crosshair_control.draw_rect(Rect2(0, 0, center.x - radius, sz.y), dark)
+		_crosshair_control.draw_rect(Rect2(center.x + radius, 0, sz.x - (center.x + radius), sz.y), dark)
+		_crosshair_control.draw_rect(Rect2(center.x - radius, 0, radius * 2.0, center.y - radius), dark)
+		_crosshair_control.draw_rect(Rect2(center.x - radius, center.y + radius, radius * 2.0, sz.y - (center.y + radius)), dark)
+		_crosshair_control.draw_arc(center, radius + 36.0, 0.0, TAU, 96, dark, 76.0, true)
+		_crosshair_control.draw_arc(center, radius, 0.0, TAU, 96, Color(0.06, 0.08, 0.10, a), 4.0, true)
+		# Fine reticle lines & mil-dots
+		var wire := Color(0.05, 0.07, 0.09, 0.92 * a)
+		_crosshair_control.draw_line(Vector2(center.x - radius, center.y), Vector2(center.x + radius, center.y), wire, 1.4)
+		_crosshair_control.draw_line(Vector2(center.x, center.y - radius), Vector2(center.x, center.y + radius), wire, 1.4)
+		for i in range(-4, 5):
+			if i == 0:
+				continue
+			var off := float(i) * (radius * 0.14)
+			_crosshair_control.draw_line(center + Vector2(off, -4.5), center + Vector2(off, 4.5), wire, 1.5)
+			_crosshair_control.draw_line(center + Vector2(-4.5, off), center + Vector2(4.5, off), wire, 1.5)
+		_crosshair_control.draw_circle(center, 2.2, Color(0.95, 0.18, 0.18, 0.9 * a))
+	else:
+		var col := Color(0.95, 0.98, 1.0, _crosshair_alpha)
+		var gap := _spread_pixels
+		var length := 8.0
+		var width := 2.0
+		_crosshair_control.draw_line(center + Vector2(-gap - length, 0), center + Vector2(-gap, 0), col, width)
+		_crosshair_control.draw_line(center + Vector2(gap, 0), center + Vector2(gap + length, 0), col, width)
+		_crosshair_control.draw_line(center + Vector2(0, -gap - length), center + Vector2(0, -gap), col, width)
+		_crosshair_control.draw_line(center + Vector2(0, gap), center + Vector2(0, gap + length), col, width)
+		_crosshair_control.draw_circle(center, 1.6, Color(0.95, 0.98, 1.0, maxf(0.45, _crosshair_alpha)))
 
 	# Hitmarker diagonal X-ticks
 	if _hitmarker_timer > 0.0:

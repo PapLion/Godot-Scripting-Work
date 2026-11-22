@@ -1,12 +1,11 @@
 # Progress Checkpoint — 01-Advanced-FPS
 
-## Status: COMPLETED
-- [x] Phase 1: Environment inspection, project creation, MCP runtime autoload, git repo (`feat/advanced-fps-framework`)
-- [x] Phase 2: Core FPS architecture design
-- [x] Phase 3: Core, Player, and Weapon systems implementation
-- [x] Phase 4: Damage, Hitboxes, Targets, Attachments, FX, and Audio implementation
-- [x] Phase 5: Minimal FPS Training Range & HUD integration
-- [x] Phase 6: Automated test suite (48/48 pass) & live Godot MCP runtime verification
-- [x] Phase 7: Defect fixes & stabilization (HUD top-bar spacing, weapon-switch cooldown reset, audio cache cleanup)
-- [x] Phase 8: Real gameplay recordings (36s main demo MP4, 4 short clips MP4, 2 GIF previews, 5 PNG screenshots)
-- [x] Phase 9: Documentation (`README.md`, `ARCHITECTURE.md`, `EXTENDING.md`, `PORTFOLIO_BLURB.md`) & final Git commits
+## Status: COMPLETED (v2 — Realistic Rigged Weapons & Animation Integration)
+- [x] v1: Core Advanced FPS Framework (`feat/advanced-fps-framework` @ `f810be7`)
+- [x] v2 Phase 1: Dedicated branch `feat/realistic-weapon-models`, v1 media backed up to `portfolio_media/v1_prototype/`
+- [x] v2 Phase 2: Blender 5.3 modeling, PBR PNG textures, rigid armatures, and multi-action NLA animations for AK-47, SPAS-12, and AWP
+- [x] v2 Phase 3: 9 Blender studio renders (Hero, Alternate, Exploded Rig per weapon) saved to `portfolio_media/models/`
+- [x] v2 Phase 4: Godot 4.7.2 GLB import + `WeaponViewmodel` / `WeaponManager` animation sync + AWP Mil-Dot Scope ADS overlay
+- [x] v2 Phase 5: Expanded automated test suite (`54/54` passed, `0` failed) + `validate_scripts` (`27/27` valid)
+- [x] v2 Phase 6: Updated v2 gameplay videos (36s main + 4 short clips), 2 GIF previews, and 6 authentic screenshots
+- [x] v2 Phase 7: Documentation (`docs/RIGGING_AND_ANIMATION.md`, updated `README.md`) & final Git commit

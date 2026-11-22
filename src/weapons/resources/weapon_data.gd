@@ -24,6 +24,7 @@ enum VisualPreset {
 @export var weapon_id: StringName = &"weapon_default"
 @export var display_name: String = "Default Weapon"
 @export var visual_preset: VisualPreset = VisualPreset.ASSAULT_RIFLE
+@export var viewmodel_scene: PackedScene
 @export var accent_color: Color = Color(0.22, 0.24, 0.28)
 
 @export_group("Ballistics & Damage")

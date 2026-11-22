@@ -138,9 +138,13 @@ func request_reload() -> bool:
 	if is_shell:
 		_shell_stage = ShellReloadStage.STARTING
 		_action_timer = weapon.stats.shell_reload_start_duration
+		if _viewmodel != null:
+			_viewmodel.play_shell_start(_action_timer)
 	else:
 		_shell_stage = ShellReloadStage.NONE
 		_action_timer = weapon.stats.empty_reload_duration if is_empty else weapon.stats.tactical_reload_duration
+		if _viewmodel != null:
+			_viewmodel.play_reload_magazine(_action_timer)
 
 	_play_weapon_sound(&"reload_mag_out")
 	reload_started.emit(is_empty, is_shell)
@@ -178,6 +182,8 @@ func request_switch_slot(slot_index: int) -> bool:
 	var current := get_current_weapon()
 	_action_timer = current.data.unequip_duration if current != null else 0.15
 	state_machine.set_action_state(WeaponStateMachine.ActionState.UNEQUIPPING)
+	if _viewmodel != null:
+		_viewmodel.play_unequip(_action_timer)
 	return true
 
 
@@ -471,6 +477,8 @@ func _advance_shell_reload(weapon: WeaponInstance) -> void:
 		ShellReloadStage.STARTING:
 			_shell_stage = ShellReloadStage.INSERTING
 			_action_timer = weapon.stats.shell_reload_insert_duration
+			if _viewmodel != null:
+				_viewmodel.play_shell_insert(_action_timer)
 
 		ShellReloadStage.INSERTING:
 			var inserted := weapon.insert_single_shell()
@@ -480,13 +488,19 @@ func _advance_shell_reload(weapon: WeaponInstance) -> void:
 			if weapon.current_mag >= weapon.stats.magazine_capacity or weapon.reserve_ammo <= 0:
 				_shell_stage = ShellReloadStage.ENDING
 				_action_timer = weapon.stats.shell_reload_end_duration
+				if _viewmodel != null:
+					_viewmodel.play_shell_end(_action_timer)
 			else:
 				_action_timer = weapon.stats.shell_reload_insert_duration
+				if _viewmodel != null:
+					_viewmodel.play_shell_insert(_action_timer)
 
 		ShellReloadStage.ENDING:
 			_shell_stage = ShellReloadStage.NONE
 			_play_weapon_sound(&"equip")
 			state_machine.set_action_state(WeaponStateMachine.ActionState.IDLE)
+			if _viewmodel != null:
+				_viewmodel.play_idle()
 			reload_finished.emit(false)
 
 
@@ -502,6 +516,8 @@ func _cancel_reload(was_interrupted: bool) -> void:
 	_action_timer = 0.0
 	if state_machine.is_reloading():
 		state_machine.set_action_state(WeaponStateMachine.ActionState.IDLE)
+		if _viewmodel != null:
+			_viewmodel.play_reload_interrupt()
 		reload_finished.emit(was_interrupted)
 
 
@@ -531,6 +547,7 @@ func _equip_slot_with_transition(slot_index: int) -> void:
 	state_machine.set_action_state(WeaponStateMachine.ActionState.EQUIPPING)
 	if _viewmodel != null and weapon != null:
 		_viewmodel.configure_weapon(weapon)
+		_viewmodel.play_equip(_action_timer)
 	_play_weapon_sound(&"equip")
 	_emit_current_weapon_signals()
 

@@ -1,12 +1,14 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://src/weapons/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="PackedScene" path="res://assets/weapons/ak47/ak47.glb" id="2_ak47"]
 
 [resource]
 script = ExtResource("1_wd")
 weapon_id = &"ar_m4_carbine"
-display_name = "AR-47 Tactical"
+display_name = "AK-47"
 visual_preset = 0
+viewmodel_scene = ExtResource("2_ak47")
 accent_color = Color(0.24, 0.27, 0.32, 1)
 base_damage = 28.0
 pellets_per_shot = 1
@@ -49,9 +51,9 @@ viewmodel_kick_pitch_deg = 3.0
 ads_fov = 56.0
 ads_transition_speed = 11.5
 ads_sensitivity_multiplier = 0.64
-hip_position = Vector3(0.24, -0.22, -0.44)
-ads_position = Vector3(0.0, -0.145, -0.34)
-sprint_position = Vector3(0.18, -0.29, -0.38)
+hip_position = Vector3(0.20, -0.18, -0.34)
+ads_position = Vector3(0.0, -0.084, -0.25)
+sprint_position = Vector3(0.16, -0.24, -0.30)
 sprint_rotation_deg = Vector3(-16.0, 26.0, -8.0)
 fire_sound_id = &"shot_ar"
 eject_shell_color = Color(0.88, 0.70, 0.24, 1)
