@@ -1,0 +1,8 @@
+# Godot 4 ignores
+.godot/
+*.translation
+export_presets.cfg
+
+# Temporary capture files
+*.avi
+portfolio_media/tmp/

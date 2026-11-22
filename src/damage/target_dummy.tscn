@@ -1,0 +1,86 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://src/damage/target_dummy.gd" id="1_td"]
+[ext_resource type="Script" path="res://src/damage/health_component.gd" id="2_hp"]
+[ext_resource type="Script" path="res://src/damage/hitbox_component.gd" id="3_hb"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(0.82, 0.14, 0.62)
+
+[sub_resource type="BoxMesh" id="BoxMesh_body"]
+size = Vector3(0.62, 1.05, 0.24)
+
+[sub_resource type="SphereMesh" id="SphereMesh_head"]
+radius = 0.21
+height = 0.42
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_body"]
+size = Vector3(0.66, 1.08, 0.28)
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_head"]
+radius = 0.23
+
+[sub_resource type="StandardMaterial3D" id="Mat_base"]
+albedo_color = Color(0.22, 0.24, 0.28, 1)
+roughness = 0.7
+
+[node name="TargetDummy" type="Node3D"]
+script = ExtResource("1_td")
+
+[node name="HealthComponent" type="Node" parent="."]
+script = ExtResource("2_hp")
+
+[node name="BaseMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.07, 0)
+mesh = SubResource("BoxMesh_base")
+surface_material_override/0 = SubResource("Mat_base")
+
+[node name="Pivot" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+
+[node name="BodyMesh" type="MeshInstance3D" parent="Pivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.65, 0)
+mesh = SubResource("BoxMesh_body")
+
+[node name="HeadMesh" type="MeshInstance3D" parent="Pivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.44, 0)
+mesh = SubResource("SphereMesh_head")
+
+[node name="BodyHitbox" type="Area3D" parent="Pivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.65, 0)
+collision_layer = 4
+collision_mask = 0
+script = ExtResource("3_hb")
+hit_zone = 0
+damage_multiplier = 1.0
+surface_type = 4
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Pivot/BodyHitbox"]
+shape = SubResource("BoxShape3D_body")
+
+[node name="HeadHitbox" type="Area3D" parent="Pivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.44, 0)
+collision_layer = 4
+collision_mask = 0
+script = ExtResource("3_hb")
+hit_zone = 1
+damage_multiplier = 2.0
+surface_type = 4
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Pivot/HeadHitbox"]
+shape = SubResource("SphereShape3D_head")
+
+[node name="StatusLabel" type="Label3D" parent="Pivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.95, 0)
+billboard = 1
+text = "TARGET
+HP 100 / 100"
+font_size = 38
+outline_size = 10
+
+[node name="DamagePopupLabel" type="Label3D" parent="Pivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.28, 0)
+billboard = 1
+text = ""
+font_size = 44
+outline_size = 10

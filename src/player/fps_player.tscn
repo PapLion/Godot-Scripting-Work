@@ -1,0 +1,58 @@
+[gd_scene load_steps=15 format=3]
+
+[ext_resource type="Script" path="res://src/player/fps_player.gd" id="1_player"]
+[ext_resource type="Script" path="res://src/player/fps_camera_rig.gd" id="2_camrig"]
+[ext_resource type="Script" path="res://src/weapons/runtime/weapon_viewmodel.gd" id="3_vm"]
+[ext_resource type="Script" path="res://src/weapons/runtime/weapon_manager.gd" id="4_wm"]
+[ext_resource type="Script" path="res://src/damage/health_component.gd" id="5_hp"]
+[ext_resource type="Script" path="res://src/weapons/resources/weapon_data.gd" id="13_wd"]
+[ext_resource type="Script" path="res://src/weapons/resources/attachment_data.gd" id="14_ad"]
+[ext_resource type="Resource" path="res://data/weapons/ar_m4_carbine.tres" id="6_ar"]
+[ext_resource type="Resource" path="res://data/weapons/sg_m870_tactical.tres" id="7_sg"]
+[ext_resource type="Resource" path="res://data/weapons/sr_mk14_precision.tres" id="8_sr"]
+[ext_resource type="Resource" path="res://data/attachments/optic_holo_sight.tres" id="9_optic"]
+[ext_resource type="Resource" path="res://data/attachments/muzzle_compensator.tres" id="10_muzzle"]
+[ext_resource type="Resource" path="res://data/attachments/mag_extended.tres" id="11_mag"]
+[ext_resource type="Resource" path="res://data/attachments/underbarrel_laser.tres" id="12_laser"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.36
+height = 1.8
+
+[node name="FPSPlayer" type="CharacterBody3D"]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_player")
+
+[node name="CeilingCheckRay" type="RayCast3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+target_position = Vector3(0, 0.95, 0)
+collision_mask = 1
+
+[node name="CameraRig" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+script = ExtResource("2_camrig")
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+current = true
+fov = 75.0
+near = 0.04
+far = 400.0
+
+[node name="WeaponViewmodel" type="Node3D" parent="CameraRig/Camera3D"]
+script = ExtResource("3_vm")
+
+[node name="WeaponManager" type="Node3D" parent="."]
+script = ExtResource("4_wm")
+starting_weapons = Array[ExtResource("13_wd")]([ExtResource("6_ar"), ExtResource("7_sg"), ExtResource("8_sr")])
+available_attachments = Array[ExtResource("14_ad")]([ExtResource("9_optic"), ExtResource("10_muzzle"), ExtResource("11_mag"), ExtResource("12_laser")])
+
+[node name="HealthComponent" type="Node" parent="."]
+script = ExtResource("5_hp")
+max_health = 100.0
+max_armor = 50.0
+armor_absorption_ratio = 0.5

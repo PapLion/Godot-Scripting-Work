@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/weapons/resources/weapon_data.gd" id="1_wd"]
+
+[resource]
+script = ExtResource("1_wd")
+weapon_id = &"sr_mk14_precision"
+display_name = "SR-14 Marksman"
+visual_preset = 2
+accent_color = Color(0.19, 0.24, 0.21, 1)
+base_damage = 85.0
+pellets_per_shot = 1
+fire_rate_rpm = 85.0
+supported_fire_modes = Array[int]([0])
+burst_count = 1
+effective_range = 85.0
+max_falloff_range = 180.0
+min_falloff_multiplier = 0.75
+max_ray_distance = 350.0
+impact_impulse = 11.0
+magazine_capacity = 10
+starting_reserve_ammo = 50
+max_reserve_ammo = 70
+reload_type = 0
+tactical_reload_duration = 1.95
+empty_reload_duration = 2.50
+allow_tactical_plus_one = true
+equip_duration = 0.42
+unequip_duration = 0.28
+base_hip_spread_deg = 2.60
+base_ads_spread_deg = 0.06
+move_spread_penalty_deg = 2.40
+air_spread_penalty_deg = 4.50
+crouch_spread_multiplier = 0.65
+spread_per_shot_deg = 0.90
+max_bloom_spread_deg = 4.5
+spread_recovery_rate_deg = 6.2
+recoil_vertical_kick_deg = 3.20
+recoil_horizontal_spread_deg = 0.55
+recoil_ads_multiplier = 0.70
+recoil_crouch_multiplier = 0.72
+recoil_sustained_scale = 0.14
+recoil_max_pitch_deg = 16.0
+recoil_snap_speed = 17.0
+recoil_recovery_speed = 7.2
+recoil_recovery_delay = 0.13
+viewmodel_kickback_z = 0.072
+viewmodel_kick_pitch_deg = 6.2
+ads_fov = 34.0
+ads_transition_speed = 8.5
+ads_sensitivity_multiplier = 0.36
+hip_position = Vector3(0.26, -0.23, -0.46)
+ads_position = Vector3(0.0, -0.158, -0.32)
+sprint_position = Vector3(0.20, -0.31, -0.38)
+sprint_rotation_deg = Vector3(-18.0, 28.0, -9.0)
+fire_sound_id = &"shot_precision"
+eject_shell_color = Color(0.90, 0.74, 0.28, 1)
+tracer_color = Color(0.75, 0.92, 1.0, 1)
