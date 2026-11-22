@@ -91,6 +91,24 @@ func play_fire() -> void:
 	_play_rig_anim("fire", 1.0, 0.02, false)
 
 
+func play_bolt_action(target_duration: float) -> void:
+	if _has_anim("bolt_action"):
+		_play_rig_anim_to_duration("bolt_action", target_duration, 0.05)
+	elif _has_anim("bolt"):
+		_play_rig_anim_to_duration("bolt", target_duration, 0.05)
+
+
+func get_hand_anchors() -> Dictionary:
+	var anchors: Dictionary = {}
+	if _model_instance == null:
+		return anchors
+	for marker_name in ["GripPrimary", "GripSupport", "MagInteract", "BoltInteract", "ShellPort", "ADSRef"]:
+		var n := _find_node_by_name(_model_instance, marker_name)
+		if n is Node3D:
+			anchors[marker_name] = (n as Node3D).position
+	return anchors
+
+
 func play_reload_magazine(target_duration: float) -> void:
 	_play_rig_anim_to_duration("reload", target_duration, 0.08)
 
@@ -162,15 +180,17 @@ func update_transform(
 	is_reloading: bool,
 	is_equipping_or_unequipping: bool,
 	move_ratio: float,
-	is_grounded: bool
+	is_grounded: bool,
+	is_cycling_bolt: bool = false
 ) -> void:
 	if _current_data == null:
 		return
 
 	_ads_alpha = ads_alpha
-	# Hide 3D sniper viewmodel at full scope-in so HUD mil-dot scope overlay provides clear sight picture
+	# Hide 3D sniper viewmodel at full scope-in so HUD mil-dot scope overlay provides clear sight picture,
+	# but keep it visible while cycling the bolt so the right-hand bolt animation is clearly shown!
 	if _current_data.visual_preset == WeaponData.VisualPreset.PRECISION_RIFLE:
-		visible = (_ads_alpha < 0.78) or is_reloading or is_equipping_or_unequipping
+		visible = (_ads_alpha < 0.78) or is_reloading or is_equipping_or_unequipping or is_cycling_bolt
 	else:
 		visible = true
 
@@ -194,7 +214,7 @@ func update_transform(
 				_muzzle_flash_light.visible = false
 
 	# Keep rigged weapons returning smoothly to idle when non-looping anims end
-	if _using_rigged_model and _anim_player != null and not _anim_player.is_playing() and not is_reloading and not is_equipping_or_unequipping:
+	if _using_rigged_model and _anim_player != null and not _anim_player.is_playing() and not is_reloading and not is_equipping_or_unequipping and not is_cycling_bolt:
 		play_idle()
 
 	var ads_pos := _current_stats.ads_position if _current_stats != null else _current_data.ads_position

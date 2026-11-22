@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://src/weapons/resources/weapon_data.gd" id="1_wd"]
-[ext_resource type="PackedScene" path="res://assets/weapons/awp/awp.glb" id="2_awp"]
+[ext_resource type="PackedScene" path="res://assets/weapons/awp/awp_fp.glb" id="2_awp"]
 
 [resource]
 script = ExtResource("1_wd")
@@ -12,8 +12,9 @@ viewmodel_scene = ExtResource("2_awp")
 accent_color = Color(0.19, 0.24, 0.21, 1)
 base_damage = 85.0
 pellets_per_shot = 1
-fire_rate_rpm = 85.0
-supported_fire_modes = Array[int]([0])
+fire_rate_rpm = 65.0
+supported_fire_modes = Array[int]([3])
+bolt_cycle_duration = 0.82
 burst_count = 1
 effective_range = 85.0
 max_falloff_range = 180.0

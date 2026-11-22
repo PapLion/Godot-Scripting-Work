@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://src/weapons/resources/weapon_data.gd" id="1_wd"]
-[ext_resource type="PackedScene" path="res://assets/weapons/ak47/ak47.glb" id="2_ak47"]
+[ext_resource type="PackedScene" path="res://assets/weapons/ak47/ak47_fp.glb" id="2_ak47"]
 
 [resource]
 script = ExtResource("1_wd")

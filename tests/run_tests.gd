@@ -278,11 +278,16 @@ func _test_rigged_weapon_models_and_animations() -> void:
 	var vm := inst.player.camera_rig.viewmodel
 	var wm := inst.player.weapon_manager
 
-	# 1. AK-47 rigged animations
+	# 1. AK-47 FP rigged animations & hand anchors
 	var ak_anims := vm.get_animation_names()
 	_assert(
 		ak_anims.has("idle") and ak_anims.has("fire") and ak_anims.has("reload") and ak_anims.has("equip") and ak_anims.has("unequip"),
-		"AK-47 GLB imports with required animations (%s)" % [", ".join(ak_anims)]
+		"AK-47 FP GLB imports with required weapon+hand animations (%s)" % [", ".join(ak_anims)]
+	)
+	var ak_anchors := vm.get_hand_anchors()
+	_assert(
+		ak_anchors.has("GripPrimary") and ak_anchors.has("GripSupport") and ak_anchors.has("MagInteract") and ak_anchors.has("BoltInteract"),
+		"AK-47 defines configurable hand-to-weapon attachment markers"
 	)
 	wm.get_current_weapon().current_mag = 10
 	wm.request_reload()
@@ -290,24 +295,53 @@ func _test_rigged_weapon_models_and_animations() -> void:
 	wm.request_switch_slot(1)
 	_assert(vm.get_current_animation() == "unequip", "Weapon switch interrupts AK-47 reload and plays 'unequip'")
 
-	# 2. SPAS-12 rigged animations + shell-by-shell sync
+	# 2. SPAS-12 FP rigged animations + shell-by-shell sync + hand anchors
 	wm._equip_slot_immediate(1)
 	var spas_anims := vm.get_animation_names()
 	_assert(
 		spas_anims.has("idle") and spas_anims.has("fire") and spas_anims.has("shell_start") and spas_anims.has("shell_insert") and spas_anims.has("shell_end") and spas_anims.has("reload_interrupt"),
-		"SPAS-12 GLB imports with shell-by-shell & interrupt animations (%s)" % [", ".join(spas_anims)]
+		"SPAS-12 FP GLB imports with shell-by-shell & interrupt animations (%s)" % [", ".join(spas_anims)]
+	)
+	var spas_anchors := vm.get_hand_anchors()
+	_assert(
+		spas_anchors.has("GripPrimary") and spas_anchors.has("GripSupport") and spas_anchors.has("ShellPort"),
+		"SPAS-12 defines configurable hand-to-weapon attachment markers"
 	)
 	wm.get_current_weapon().current_mag = 2
 	wm.request_reload()
 	_assert(vm.get_current_animation() == "shell_start", "SPAS-12 plays 'shell_start' on shell reload start")
 
-	# 3. AWP rigged animations + bolt-action cycle
+	# 3. AWP FP rigged animations + BOLT_ACTION gameplay-state reconciliation!
 	wm._equip_slot_immediate(2)
 	var awp_anims := vm.get_animation_names()
 	_assert(
-		awp_anims.has("idle") and awp_anims.has("fire") and (awp_anims.has("bolt") or awp_anims.has("bolt_cycle")) and awp_anims.has("reload") and awp_anims.has("equip"),
-		"AWP GLB imports with bolt-action & reload animations (%s)" % [", ".join(awp_anims)]
+		awp_anims.has("idle") and awp_anims.has("fire") and awp_anims.has("bolt_action") and awp_anims.has("reload") and awp_anims.has("equip"),
+		"AWP FP GLB imports with bolt_action & reload hand animations (%s)" % [", ".join(awp_anims)]
 	)
+	var awp_w := wm.get_current_weapon()
+	_assert(awp_w.get_current_fire_mode() == WeaponData.FireMode.BOLT_ACTION, "AWP is configured in BOLT_ACTION fire mode")
+	var mag_before := awp_w.current_mag
+	wm.set_trigger_held(true)
+	wm.step(0.02, 0.0, false, true)
+	wm.set_trigger_held(false)
+	_assert(
+		awp_w.current_mag == mag_before - 1 and wm.state_machine.action_state == WeaponStateMachine.ActionState.CYCLING_BOLT,
+		"Firing AWP transitions into CYCLING_BOLT state"
+	)
+	_assert(vm.get_current_animation() == "bolt_action", "AWP plays right-hand 'bolt_action' animation during CYCLING_BOLT")
+	# Attempt to fire again mid-bolt-cycle -> MUST be blocked!
+	wm.set_trigger_held(true)
+	wm.step(0.02, 0.0, false, true)
+	wm.set_trigger_held(false)
+	_assert(awp_w.current_mag == mag_before - 1, "AWP blocks next shot before bolt cycle completes")
+	# Advance past bolt_cycle_duration -> returns to IDLE and allows next shot!
+	for _i in 45:
+		wm.step(0.02, 0.0, false, true)
+	_assert(wm.state_machine.action_state == WeaponStateMachine.ActionState.IDLE, "AWP returns to IDLE after bolt cycle completes")
+	wm.set_trigger_held(true)
+	wm.step(0.02, 0.0, false, true)
+	wm.set_trigger_held(false)
+	_assert(awp_w.current_mag == mag_before - 2, "AWP fires cleanly after bolt cycle completes")
 
 	inst.queue_free()
 	await process_frame

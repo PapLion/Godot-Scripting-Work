@@ -126,6 +126,9 @@ func _on_state_changed(action_state: WeaponStateMachine.ActionState, aim_state: 
 	if action_state == WeaponStateMachine.ActionState.RELOADING:
 		_state_badge_label.text = "RELOADING..."
 		_state_badge_label.modulate = Color(1.0, 0.82, 0.32)
+	elif action_state == WeaponStateMachine.ActionState.CYCLING_BOLT:
+		_state_badge_label.text = "BOLT CYCLE"
+		_state_badge_label.modulate = Color(0.95, 0.72, 0.35)
 	elif action_state in [WeaponStateMachine.ActionState.EQUIPPING, WeaponStateMachine.ActionState.UNEQUIPPING]:
 		_state_badge_label.text = "SWITCHING"
 		_state_badge_label.modulate = Color(0.75, 0.85, 0.95)

@@ -7,6 +7,7 @@ enum FireMode {
 	SEMI = 0,
 	AUTO = 1,
 	BURST = 2,
+	BOLT_ACTION = 3,
 }
 
 enum ReloadType {
@@ -54,6 +55,7 @@ enum VisualPreset {
 @export_group("Handling & Timing")
 @export var equip_duration: float = 0.32
 @export var unequip_duration: float = 0.22
+@export var bolt_cycle_duration: float = 0.82
 
 @export_group("Spread (Degrees)")
 @export var base_hip_spread_deg: float = 1.6
@@ -105,5 +107,7 @@ static func get_fire_mode_label(mode: FireMode) -> String:
 			return "AUTO"
 		FireMode.BURST:
 			return "BURST"
+		FireMode.BOLT_ACTION:
+			return "BOLT"
 		_:
 			return "SEMI"

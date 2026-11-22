@@ -39,13 +39,13 @@ All weapons are authored as reusable `.tres` resources under `data/weapons/`, ba
 
 1. **`ar_m4_carbine.tres` — AK-47 (Assault Rifle)**
    - Fire modes: `AUTO` / `SEMI` (`700 RPM`), `28` base damage, `30`-round magazine (`+1` tactical chamber)
-   - Rigged curved steel magazine, reciprocating charging handle, fire selector, mag release, and trigger (`ak47.glb`)
+   - Synchronized first-person gloved hands + rigged curved steel magazine, reciprocating charging handle, fire selector, mag release, and trigger (`ak47_fp.glb`)
 2. **`sg_m870_tactical.tres` — SPAS-12 (Shotgun)**
    - Fire mode: `SEMI` (`72 RPM`), `8` pellets × `18` damage, `6`-shell tube
-   - Rigged ribbed pump forend, ventilated heatshield, folding stock, chrome bolt, loading gate, and animated 12ga shell synchronized to shell-by-shell reload & fire-interrupt (`spas12.glb`)
+   - Synchronized first-person hands + ribbed forend, ventilated heatshield, folding stock, chrome bolt, loading gate, and animated left-hand 12ga shell loading & reload interruption (`spas12_fp.glb`)
 3. **`sr_mk14_precision.tres` — AWP (Precision Rifle)**
-   - Fire mode: `SEMI` (`85 RPM`), `85` base damage (`170` headshot), `10`-round magazine
-   - Rigged olive-drab thumbhole chassis, 4-stage bolt-action handle (`lift → pull → push → lock`), box magazine, variable scope + tactical Mil-Dot ADS overlay, and folding bipod (`awp.glb`)
+   - Fire mode: `BOLT_ACTION` (`[BOLT]`, `0.82s` bolt cycle), `85` base damage (`170` headshot), `10`-round magazine
+   - Synchronized first-person hands + olive-drab thumbhole chassis, right-hand 4-stage bolt-action cycling (`CYCLING_BOLT` blocks firing until cycle completes), box magazine reload, variable scope + tactical Mil-Dot ADS overlay, and folding bipod (`awp_fp.glb`)
 
 ### Included Attachments (`data/attachments/`)
 
@@ -104,7 +104,7 @@ Godot_v4.7.2-stable_win64_console.exe --headless --path . --script res://tests/r
 ## Testing & Verification Summary
 
 - **Static Validation (`validate_scripts`):** 27/27 GDScript files valid, 0 errors.
-- **Automated Suite (`tests/run_tests.gd`):** **54/54 passed**, covering resource loading, distance falloff, attachment stat composition & ammo conservation, state-machine invariants, framerate-independent recoil/spread recovery (60 vs 120 FPS), armor/hitbox multipliers, tactical/empty/shell-by-shell reloads, fire-interrupt, weapon switching, scene instantiation, and rigged GLB animation import & state synchronization.
+- **Automated Suite (`tests/run_tests.gd`):** **62/62 passed**, covering resource loading, distance falloff, attachment stat composition & ammo conservation, state-machine invariants, framerate-independent recoil/spread recovery (60 vs 120 FPS), armor/hitbox multipliers, tactical/empty/shell-by-shell reloads, fire-interrupt, weapon switching, scene instantiation, rigged GLB weapon+hand animations, configurable hand attachment markers, and AWP `BOLT_ACTION` / `CYCLING_BOLT` readiness enforcement.
 - **Live Engine Verification (Godot MCP `run_project` + `game_eval` + `game_screenshot`):** Verified zero runtime errors under Vulkan Forward+, real raycast headshots (`2.0x`), armor absorption (`50%` split), multi-pellet shotgun hits, high-zoom precision ADS, and live attachment toggling.
 
 ---

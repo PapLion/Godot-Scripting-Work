@@ -3,7 +3,7 @@ extends Node3D
 ## First-person camera rig handling pitch clamping, ADS FOV interpolation,
 ## real weapon recoil pitch/yaw application, headbob, and landing camera impulse.
 
-@export var base_fov: float = 75.0
+@export var base_fov: float = 70.0
 @export var mouse_sensitivity: float = 0.14
 @export var min_pitch_deg: float = -85.0
 @export var max_pitch_deg: float = 85.0

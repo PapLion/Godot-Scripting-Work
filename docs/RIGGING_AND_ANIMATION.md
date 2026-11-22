@@ -6,13 +6,30 @@ This document details the Blender 5.3 asset pipeline, bone hierarchies, exported
 
 ## Asset Organization
 
-| Weapon | Editable Blender Source | Exported Game Asset | PBR Textures |
+| Asset | Editable Blender Source | Exported Game Asset | PBR Textures |
 | :--- | :--- | :--- | :--- |
-| **AK-47** | `assets/weapons/ak47/source/ak47.blend` | `assets/weapons/ak47/ak47.glb` | `assets/weapons/textures/AK_*` |
-| **SPAS-12** | `assets/weapons/spas12/source/spas12.blend` | `assets/weapons/spas12/spas12.glb` | `assets/weapons/textures/SPAS_*` |
-| **AWP** | `assets/weapons/awp/source/awp.blend` | `assets/weapons/awp/awp.glb` | `assets/weapons/textures/AWP_*` |
+| **Reusable FP Arms Rig** | `assets/hands/source/fps_arms_rig.blend` | `assets/hands/fps_arms.glb` | `assets/weapons/textures/FP_*` |
+| **AK-47 + FP Hands** | `assets/weapons/ak47/source/ak47_fp.blend` (+ `ak47.blend`) | `assets/weapons/ak47/ak47_fp.glb` | `assets/weapons/textures/AK_*`, `FP_*` |
+| **SPAS-12 + FP Hands** | `assets/weapons/spas12/source/spas12_fp.blend` (+ `spas12.blend`) | `assets/weapons/spas12/spas12_fp.glb` | `assets/weapons/textures/SPAS_*`, `FP_*` |
+| **AWP + FP Hands** | `assets/weapons/awp/source/awp_fp.blend` (+ `awp.blend`) | `assets/weapons/awp/awp_fp.glb` | `assets/weapons/textures/AWP_*`, `FP_*` |
 
-Editable `.blend` sources are kept in `source/` subfolders with `.gdignore` so Godot imports only the optimized `.glb` packages cleanly. Reproducible Blender Python generator scripts live in `assets/blender_scripts/`.
+Editable `.blend` sources live in `source/` subfolders with `.gdignore` so Godot imports only optimized `.glb` packages cleanly. Reproducible Blender 5.3 Python generators live in `assets/blender_scripts/` (`fps_arms_rig.py`, `animate_weapons_with_hands.py`, and weapon builders).
+
+---
+
+## Reusable First-Person Arms & Tactical Gloves Rig
+
+- **Anatomy & Materials:** Bare muscular forearms, rolled tactical combat sleeves, leather wrist cuffs, olive-drab padded gloves, molded carbon knuckle armor, leather palm pads, and 5 articulated fingers per hand (3 phalanges per finger/thumb = 38 clean deform bones).
+- **Blender Control Rig + Runtime Deform Export:** Editable `.blend` rigs include independent `ik_hand_L/R` and `pole_elbow_L/R` controls with Blender IK constraints, baked cleanly onto deform bones (`export_def_bones=True`) with anatomical forearm supination roll alignment (preventing wrist candy-wrapper pinching).
+- **Hand-to-Weapon Attachment Reference Markers:** Each weapon rig exports configurable `Empty` reference anchors read via `WeaponViewmodel.get_hand_anchors()`: `GripPrimary`, `GripSupport`, `MagInteract`, `BoltInteract`, `ShellPort`, and `ADSRef`.
+
+---
+
+## AWP Bolt-Action Gameplay-State Reconciliation
+
+To ensure the AWP's right-hand bolt-cycling animation matches authentic gameplay readiness:
+- Added `WeaponData.FireMode.BOLT_ACTION` (`[BOLT]`) and `WeaponStateMachine.ActionState.CYCLING_BOLT`.
+- Firing the AWP when rounds remain in the magazine atomically enters `CYCLING_BOLT` for `bolt_cycle_duration` (`0.82s`), exits full scope zoom so the right-hand 4-stage `bolt_action` animation is visible, **blocks the next shot until the bolt cycle finishes**, and supports clean cancellation if the player switches weapons.
 
 ---
 

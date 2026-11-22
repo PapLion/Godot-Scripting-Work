@@ -14,6 +14,7 @@ enum ActionState {
 	RELOADING = 2,
 	EQUIPPING = 3,
 	UNEQUIPPING = 4,
+	CYCLING_BOLT = 5,
 }
 
 enum AimState {
@@ -38,7 +39,7 @@ func set_action_state(next_state: ActionState) -> bool:
 	action_state = next_state
 
 	# Enforce cross-dimension invariants
-	if next_state in [ActionState.RELOADING, ActionState.EQUIPPING, ActionState.UNEQUIPPING]:
+	if next_state in [ActionState.RELOADING, ActionState.EQUIPPING, ActionState.UNEQUIPPING, ActionState.CYCLING_BOLT]:
 		set_aim_state(AimState.HIP)
 	if next_state == ActionState.FIRING:
 		set_sprint_state(SprintState.NORMAL)
@@ -129,5 +130,7 @@ static func get_action_name(s: ActionState) -> String:
 			return "EQUIPPING"
 		ActionState.UNEQUIPPING:
 			return "UNEQUIPPING"
+		ActionState.CYCLING_BOLT:
+			return "CYCLING_BOLT"
 		_:
 			return "UNKNOWN"

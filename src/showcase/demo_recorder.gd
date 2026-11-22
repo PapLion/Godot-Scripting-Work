@@ -279,7 +279,7 @@ func _run_clip2_shotgun_shells() -> void:
 
 
 func _run_clip3_precision_hitboxes() -> void:
-	# 9s clip: Precision rifle high-zoom ADS, 45m headshot + 25m armored headshot
+	# 10s clip: AWP high-zoom scope ADS, 45m headshot -> visible right-hand BOLT_ACTION cycle -> 25m shot -> full reload!
 	var t := _elapsed
 	if _step_idx == 0:
 		_step_idx = 1
@@ -288,27 +288,29 @@ func _run_clip3_precision_hitboxes() -> void:
 	if _step_idx == 1 and t >= 0.8:
 		_step_idx = 2
 		_wm.set_aim_requested(true)
-	if _step_idx == 2 and t >= 2.1:
+	if _step_idx == 2 and t >= 1.9:
 		_step_idx = 3
 		_wm.set_trigger_held(true)
-	if _step_idx == 3 and t >= 2.3:
+	if _step_idx == 3 and t >= 2.05:
 		_step_idx = 4
 		_wm.set_trigger_held(false)
+		# Drop ADS briefly so right-hand bolt-action cycling is clearly showcased!
+		_wm.set_aim_requested(false)
 		_aim_target = _get_target_point("TargetMid25m", "HeadHitbox")
-	if _step_idx == 4 and t >= 4.0:
+	if _step_idx == 4 and t >= 3.3:
 		_step_idx = 5
-		_wm.set_trigger_held(true)
+		_wm.set_aim_requested(true)
 	if _step_idx == 5 and t >= 4.2:
 		_step_idx = 6
-		_wm.set_trigger_held(false)
-	if _step_idx == 6 and t >= 5.6:
-		_step_idx = 7
 		_wm.set_trigger_held(true)
-	if _step_idx == 7 and t >= 5.8:
-		_step_idx = 8
+	if _step_idx == 6 and t >= 4.35:
+		_step_idx = 7
 		_wm.set_trigger_held(false)
 		_wm.set_aim_requested(false)
-	if t >= 8.5:
+	if _step_idx == 7 and t >= 5.6:
+		_step_idx = 8
+		_wm.request_reload()
+	if t >= 9.0:
 		get_tree().quit(0)
 
 

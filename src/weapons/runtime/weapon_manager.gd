@@ -290,6 +290,7 @@ func step(
 			WeaponStateMachine.ActionState.EQUIPPING,
 			WeaponStateMachine.ActionState.UNEQUIPPING,
 		]
+		var is_cycling_bolt := state_machine.action_state == WeaponStateMachine.ActionState.CYCLING_BOLT
 		_viewmodel.update_transform(
 			delta,
 			ads_alpha,
@@ -297,7 +298,8 @@ func step(
 			state_machine.is_reloading(),
 			is_equip_transition,
 			move_ratio,
-			is_grounded
+			is_grounded,
+			is_cycling_bolt
 		)
 
 
@@ -356,7 +358,7 @@ func _step_firing(weapon: WeaponInstance, is_crouching: bool) -> void:
 		match mode:
 			WeaponData.FireMode.AUTO:
 				should_fire = true
-			WeaponData.FireMode.SEMI:
+			WeaponData.FireMode.SEMI, WeaponData.FireMode.BOLT_ACTION:
 				if not _trigger_consumed_semi:
 					should_fire = true
 			WeaponData.FireMode.BURST:
@@ -381,7 +383,7 @@ func _step_firing(weapon: WeaponInstance, is_crouching: bool) -> void:
 		return
 
 	_execute_shot(weapon, is_crouching)
-	if mode == WeaponData.FireMode.SEMI or mode == WeaponData.FireMode.BURST:
+	if mode in [WeaponData.FireMode.SEMI, WeaponData.FireMode.BURST, WeaponData.FireMode.BOLT_ACTION]:
 		_trigger_consumed_semi = true
 	if _burst_remaining > 0:
 		_burst_remaining -= 1
@@ -438,6 +440,14 @@ func _execute_shot(weapon: WeaponInstance, is_crouching: bool) -> void:
 			_play_feedback_sound(&"hit_body")
 		hit_confirmed.emit(summary.any_critical_hit, summary.any_kill, summary.total_damage)
 
+	# Bolt-action weapons (e.g. AWP) require completing a bolt cycle before the next shot is available
+	if weapon.get_current_fire_mode() == WeaponData.FireMode.BOLT_ACTION and weapon.current_mag > 0:
+		_action_timer = maxf(0.25, weapon.data.bolt_cycle_duration)
+		_fire_cooldown = maxf(_fire_cooldown, _action_timer)
+		state_machine.set_action_state(WeaponStateMachine.ActionState.CYCLING_BOLT)
+		if _viewmodel != null:
+			_viewmodel.play_bolt_action(_action_timer)
+
 
 func _step_action_timers(delta: float, weapon: WeaponInstance) -> void:
 	match state_machine.action_state:
@@ -463,6 +473,14 @@ func _step_action_timers(delta: float, weapon: WeaponInstance) -> void:
 					_equip_slot_with_transition(next_slot)
 				else:
 					state_machine.set_action_state(WeaponStateMachine.ActionState.IDLE)
+
+		WeaponStateMachine.ActionState.CYCLING_BOLT:
+			_action_timer -= delta
+			if _action_timer <= 0.0:
+				_play_weapon_sound(&"equip")
+				state_machine.set_action_state(WeaponStateMachine.ActionState.IDLE)
+				if _viewmodel != null:
+					_viewmodel.play_idle()
 
 		WeaponStateMachine.ActionState.EQUIPPING:
 			_action_timer -= delta
