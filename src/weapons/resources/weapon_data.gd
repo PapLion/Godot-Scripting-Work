@@ -8,6 +8,7 @@ enum FireMode {
 	AUTO = 1,
 	BURST = 2,
 	BOLT_ACTION = 3,
+	SAFE = 4,
 }
 
 enum ReloadType {
@@ -109,5 +110,7 @@ static func get_fire_mode_label(mode: FireMode) -> String:
 			return "BURST"
 		FireMode.BOLT_ACTION:
 			return "BOLT"
+		FireMode.SAFE:
+			return "SAFE"
 		_:
 			return "SEMI"

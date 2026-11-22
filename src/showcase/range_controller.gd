@@ -66,9 +66,11 @@ func _build_range_environment() -> void:
 	# Firing line accent stripe at Z = +2
 	_add_visual_box("FiringLineStripe", Vector3(28.0, 0.02, 0.25), Vector3(0.0, 0.01, 2.0), accent_mat)
 
-	# Tactical cover blocks near firing deck (standing + crouching cover)
+	# Tactical cover blocks near firing deck (standing + crouching cover + tall corner-peek pillar)
 	_add_static_box("CoverLeft", Vector3(2.6, 1.15, 0.55), Vector3(-4.2, 0.575, 0.8), cover_mat, SurfaceMaterialType.Type.CONCRETE)
 	_add_static_box("CoverRight", Vector3(2.6, 1.15, 0.55), Vector3(4.2, 0.575, 0.8), cover_mat, SurfaceMaterialType.Type.CONCRETE)
+	_add_static_box("PeekPillarCenter", Vector3(1.15, 2.35, 0.55), Vector3(-1.35, 1.175, 3.0), cover_mat, SurfaceMaterialType.Type.CONCRETE)
+	_add_label("Q/E PEEK COVER", Vector3(-1.35, 2.60, 3.30), 26)
 
 	# Low crouch-clearance beam on the far left for testing crouch ceiling detection
 	_add_static_box("CrouchTunnelRoof", Vector3(3.6, 0.35, 3.2), Vector3(-10.5, 1.52, 4.5), cover_mat, SurfaceMaterialType.Type.METAL)

@@ -34,6 +34,7 @@ var scripted_control: bool = false
 var scripted_move_input: Vector2 = Vector2.ZERO
 var scripted_sprint: bool = false
 var scripted_crouch: bool = false
+var scripted_lean: float = 0.0
 
 var _was_on_floor: bool = true
 var _last_y_velocity: float = 0.0
@@ -98,6 +99,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		weapon_manager.request_reload()
 	elif event.is_action_pressed("fire_mode"):
 		weapon_manager.request_cycle_fire_mode()
+	elif event.is_action_pressed("switch_shoulder"):
+		weapon_manager.toggle_shoulder_side()
 	elif event.is_action_pressed("weapon_1"):
 		weapon_manager.request_switch_slot(0)
 	elif event.is_action_pressed("weapon_2"):
@@ -172,21 +175,35 @@ func _physics_process(delta: float) -> void:
 	var move_ratio := Vector2(velocity.x, velocity.z).length() / maxf(0.1, walk_speed)
 	_step_footsteps(delta, move_ratio)
 
+	# Read Q/E tactical lean input (cancelled smoothly while sprinting)
+	var lean_input := 0.0
+	if not is_sprinting:
+		if scripted_control:
+			lean_input = clampf(scripted_lean, -1.0, 1.0)
+		else:
+			lean_input = Input.get_axis("lean_left", "lean_right")
+
+	# Camera rig update first so collision-aware lean ratio feeds weapon viewmodel cleanly
+	var shoulder_side := weapon_manager.shoulder_side if weapon_manager != null else 1.0
+	if camera_rig != null:
+		var eye_h := crouch_eye_height if is_crouching else standing_eye_height
+		var target_fov := weapon_manager.get_target_fov(camera_rig.base_fov) if weapon_manager != null else camera_rig.base_fov
+		var recoil := weapon_manager.get_current_recoil_deg() if weapon_manager != null else Vector2.ZERO
+		var ads_a := weapon_manager.ads_alpha if weapon_manager != null else 0.0
+		var space := get_world_3d().direct_space_state if is_inside_tree() else null
+		camera_rig.update_rig(
+			delta, eye_h, target_fov, recoil, move_ratio, is_on_floor(), is_sprinting, ads_a,
+			lean_input, shoulder_side, space, self, [get_rid()]
+		)
+
 	# Weapon input & step
 	if weapon_manager != null:
 		if not scripted_control:
 			weapon_manager.set_trigger_held(Input.is_action_pressed("fire"))
 			weapon_manager.set_aim_requested(Input.is_action_pressed("aim"))
 		weapon_manager.set_sprint_requested(is_sprinting)
-		weapon_manager.step(delta, move_ratio, is_crouching, is_on_floor())
-
-	# Camera rig update (FOV, recoil pitch/yaw, eye height, headbob)
-	if camera_rig != null:
-		var eye_h := crouch_eye_height if is_crouching else standing_eye_height
-		var target_fov := weapon_manager.get_target_fov(camera_rig.base_fov) if weapon_manager != null else camera_rig.base_fov
-		var recoil := weapon_manager.get_current_recoil_deg() if weapon_manager != null else Vector2.ZERO
-		var ads_a := weapon_manager.ads_alpha if weapon_manager != null else 0.0
-		camera_rig.update_rig(delta, eye_h, target_fov, recoil, move_ratio, is_on_floor(), is_sprinting, ads_a)
+		var eff_lean := camera_rig.current_lean_ratio if camera_rig != null else 0.0
+		weapon_manager.step(delta, move_ratio, is_crouching, is_on_floor(), eff_lean)
 
 
 func look_at_world_point(world_point: Vector3) -> void:

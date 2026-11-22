@@ -47,6 +47,14 @@ func _physics_process(delta: float) -> void:
 			_run_clip3_precision_hitboxes()
 		"clip4":
 			_run_clip4_attachments_switching()
+		"tactical_selector":
+			_run_clip5_fire_selector()
+		"tactical_shoulder":
+			_run_clip6_shoulder_switching()
+		"tactical_lean":
+			_run_clip7_tactical_lean()
+		"tactical_shots":
+			_run_tactical_screenshots()
 		"shots":
 			_run_screenshots_only()
 
@@ -195,22 +203,28 @@ func _run_main_showcase() -> void:
 		_wm.set_aim_requested(false)
 		_wm.request_reload()
 
-	# 32.0-36.0s: Switch back to AR, crouch behind cover, finish cleanly
+	# 32.0-38.0s: Switch back to AR, demonstrate Left-shoulder switch + Q/E corner peek around PeekPillarCenter!
 	if _step_idx == 24 and t >= 32.0:
 		_step_idx = 25
 		_wm.request_switch_slot(0)
-		_aim_target = _get_target_point("TargetMoving20m", "BodyHitbox")
-		_player.scripted_crouch = true
-	if t >= 33.2 and t < 34.4:
-		_aim_target = _get_target_point("TargetMoving20m", "BodyHitbox")
+		_wm.toggle_shoulder_side() # Switch to Left shoulder
+		_player.global_position = Vector3(-1.35, 0.2, 4.45)
+		_aim_target = _get_target_point("TargetArmored12m", "BodyHitbox")
+	if t >= 33.4 and t < 35.6:
+		_player.scripted_lean = 1.0 # Lean right around cover pillar
 		_wm.set_aim_requested(true)
-		_wm.set_trigger_held(t >= 33.5 and t < 34.2)
-	if t >= 34.4:
+		_wm.set_trigger_held(t >= 34.0 and t < 35.0)
+	elif t >= 35.6 and t < 37.2:
+		_wm.set_trigger_held(false)
+		_player.scripted_lean = -1.0 # Lean left around cover pillar
+		_aim_target = _get_target_point("TargetClose10m", "HeadHitbox")
+		_wm.set_trigger_held(t >= 36.1 and t < 36.8)
+	elif t >= 37.2:
 		_wm.set_trigger_held(false)
 		_wm.set_aim_requested(false)
-		_player.scripted_crouch = false
+		_player.scripted_lean = 0.0
 
-	if t >= 36.0:
+	if t >= 38.0:
 		get_tree().quit(0)
 
 
@@ -401,4 +415,132 @@ func _run_screenshots_only() -> void:
 		_step_idx = 9
 		_wm.set_trigger_held(false)
 		_save_shot("05_surface_impacts_and_telemetry.png")
+		get_tree().quit(0)
+
+
+func _run_clip5_fire_selector() -> void:
+	# 9.5s clip: AK-47 Fire Selector: SAFE (disabled) -> AUTO (burst) -> SEMI (single shots) -> SAFE mid-fire!
+	var t := _elapsed
+	_aim_target = _get_target_point("TargetArmored12m", "BodyHitbox")
+	if _step_idx == 0 and t >= 0.4:
+		_step_idx = 1
+		# Cycle AUTO -> SEMI -> SAFE to start demonstration cleanly on SAFE
+		_wm.request_cycle_fire_mode()
+		_wm.request_cycle_fire_mode()
+	if _step_idx == 1 and t >= 1.2:
+		_step_idx = 2
+		_wm.set_trigger_held(true) # SAFE: must not fire!
+	if _step_idx == 2 and t >= 1.9:
+		_step_idx = 3
+		_wm.set_trigger_held(false)
+		_wm.request_cycle_fire_mode() # SAFE -> AUTO
+		_wm.request_cycle_fire_mode() # AUTO -> SEMI
+	if _step_idx == 3 and t >= 2.7:
+		_step_idx = 4
+		_wm.set_aim_requested(true)
+		_wm.set_trigger_held(true) # SEMI shot 1 (held -> fires strictly 1 round!)
+	if _step_idx == 4 and t >= 3.4:
+		_step_idx = 5
+		_wm.set_trigger_held(false)
+	if _step_idx == 5 and t >= 3.8:
+		_step_idx = 6
+		_wm.set_trigger_held(true) # SEMI shot 2
+	if _step_idx == 6 and t >= 4.2:
+		_step_idx = 7
+		_wm.set_trigger_held(false)
+		_wm.request_cycle_fire_mode() # SEMI -> SAFE
+		_wm.request_cycle_fire_mode() # SAFE -> AUTO
+	if _step_idx == 7 and t >= 5.2:
+		_step_idx = 8
+		_wm.set_trigger_held(true) # AUTO sustained burst!
+	if _step_idx == 8 and t >= 6.4:
+		_step_idx = 9
+		# Switch to SAFE mid-AUTO -> stops firing immediately!
+		_wm.request_cycle_fire_mode()
+		_wm.request_cycle_fire_mode()
+	if _step_idx == 9 and t >= 7.6:
+		_step_idx = 10
+		_wm.set_trigger_held(false)
+		_wm.set_aim_requested(false)
+	if t >= 9.0:
+		get_tree().quit(0)
+
+
+func _run_clip6_shoulder_switching() -> void:
+	# 9.5s clip: Smooth Right <-> Left shoulder switching (V) across AK-47 (with ADS), SPAS-12, and AWP!
+	var t := _elapsed
+	_aim_target = _get_target_point("TargetArmored12m", "BodyHitbox")
+	if _step_idx == 0 and t >= 0.8:
+		_step_idx = 1
+		_wm.toggle_shoulder_side() # Right -> Left (AK-47)
+	if _step_idx == 1 and t >= 2.0:
+		_step_idx = 2
+		_wm.set_aim_requested(true) # ADS from Left shoulder -> exact center!
+	if _step_idx == 2 and t >= 2.7:
+		_step_idx = 3
+		_wm.set_trigger_held(true)
+	if _step_idx == 3 and t >= 3.2:
+		_step_idx = 4
+		_wm.set_trigger_held(false)
+		_wm.set_aim_requested(false)
+		_wm.request_switch_slot(1) # SPAS-12 on Left shoulder
+	if _step_idx == 4 and t >= 4.8:
+		_step_idx = 5
+		_wm.toggle_shoulder_side() # Left -> Right (SPAS-12)
+	if _step_idx == 5 and t >= 6.0:
+		_step_idx = 6
+		_wm.request_switch_slot(2) # AWP on Right shoulder
+	if _step_idx == 6 and t >= 7.2:
+		_step_idx = 7
+		_wm.toggle_shoulder_side() # Right -> Left (AWP)
+	if t >= 9.0:
+		get_tree().quit(0)
+
+
+func _run_clip7_tactical_lean() -> void:
+	# 9.5s clip: Q/E Tactical Leaning behind PeekPillarCenter — corner peek right (ADS + fire), return, peek left (ADS + fire)!
+	var t := _elapsed
+	if _step_idx == 0:
+		_step_idx = 1
+		_player.global_position = Vector3(-1.35, 0.2, 4.45)
+		_aim_target = _get_target_point("TargetArmored12m", "BodyHitbox")
+		_smooth_aim = _aim_target
+	if t >= 0.8 and t < 3.6:
+		_player.scripted_lean = 1.0 # Lean Right (E) around pillar
+		_wm.set_aim_requested(t >= 1.3)
+		_wm.set_trigger_held(t >= 1.9 and t < 2.9)
+	elif t >= 3.6 and t < 4.5:
+		_wm.set_trigger_held(false)
+		_wm.set_aim_requested(false)
+		_player.scripted_lean = 0.0 # Return behind cover
+		_aim_target = _get_target_point("TargetClose10m", "HeadHitbox")
+	elif t >= 4.5 and t < 7.6:
+		_player.scripted_lean = -1.0 # Lean Left (Q) around pillar
+		_wm.set_aim_requested(t >= 5.0)
+		_wm.set_trigger_held(t >= 5.6 and t < 6.4)
+	else:
+		_wm.set_trigger_held(false)
+		_wm.set_aim_requested(false)
+		_player.scripted_lean = 0.0
+	if t >= 9.0:
+		get_tree().quit(0)
+
+
+func _run_tactical_screenshots() -> void:
+	var t := _elapsed
+	if _step_idx == 0:
+		_step_idx = 1
+		_wm.toggle_shoulder_side() # Left shoulder
+		_aim_target = _get_target_point("TargetArmored12m", "BodyHitbox")
+		_smooth_aim = _aim_target
+	if _step_idx == 1 and t >= 0.8:
+		_step_idx = 2
+		_save_shot("07_shoulder_left_viewmodel.png")
+		_wm.toggle_shoulder_side() # Back to Right shoulder
+		_player.global_position = Vector3(-1.35, 0.2, 4.45)
+		_player.scripted_lean = 1.0
+		_wm.set_aim_requested(true)
+	if _step_idx == 2 and t >= 1.8:
+		_step_idx = 3
+		_save_shot("08_tactical_lean_corner_peek.png")
 		get_tree().quit(0)

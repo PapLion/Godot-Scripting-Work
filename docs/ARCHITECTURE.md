@@ -42,6 +42,15 @@ TargetDummy / Any Damageable Entity
 
 ---
 
+## Tactical Mechanics Design & Collision Model
+
+1. **AK-47 Fire Selector (`SAFE` / `SEMI` / `AUTO`):** Stored per `WeaponInstance` (`fire_mode_index`) so mode state persists across weapon swaps. `FireMode.SAFE` short-circuits trigger input immediately (including mid-`AUTO` hold) without touching cooldowns or ammunition, and drives the imported AK-47 `Skeleton3D` `"selector"` bone angle (`+18°` SAFE, `0°` AUTO, `-16°` SEMI).
+2. **First-Person Shoulder Switching (`V`):** Implemented via smooth signed lateral blending (`_shoulder_blend ∈ [-1, +1]`) of hip/sprint positions, sprint rotations, subtle chest-cross dip arc, and subtle camera eye-offset—**never** via negative scale—so normals, bone poses, and ADS centerline convergence (`X = 0`) remain 100% intact across all three weapons.
+3. **Collision-Aware Tactical Leaning (`Q` / `E`):** `FPSCameraRig.compute_safe_lateral_displacement()` performs a dual-depth World-layer ray clearance probe from the player's neutral head center with a `0.24m` wall margin before applying lateral displacement (`±0.44m`) and proportional camera Z-roll (`±13.5°`).
+   - *Exposure Model & Limitation:* Because this is a single-player capsule controller without a full third-person upper-body mesh, corner peeking displaces the camera & weapon viewmodel within collision-validated world space while the player's `CharacterBody3D` capsule remains anchored behind cover. Ballistic rays originate strictly from the collision-clamped camera eye so shots cannot pass through solid walls.
+
+---
+
 ## Signal Flow
 
 - `WeaponManager` emits `weapon_equipped`, `ammo_updated`, `fire_mode_updated`, `shot_fired`, `hit_confirmed`, `reload_started`, `reload_finished`, `state_changed`, `attachments_updated`.

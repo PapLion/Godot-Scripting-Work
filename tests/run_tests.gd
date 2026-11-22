@@ -21,6 +21,7 @@ func _run_all() -> void:
 	_test_weapon_manager_firing_reloads_and_switching()
 	await _test_training_range_scene_instantiation()
 	await _test_rigged_weapon_models_and_animations()
+	await _test_tactical_mechanics_selector_shoulder_lean()
 
 	print("--------------------------------------------")
 	print("TOTAL: %d passed, %d failed" % [_passed, _failed])
@@ -42,7 +43,7 @@ func _test_weapon_resources_and_falloff() -> void:
 	var sg := load("res://data/weapons/sg_m870_tactical.tres") as WeaponData
 	var sr := load("res://data/weapons/sr_mk14_precision.tres") as WeaponData
 	_assert(ar != null and sg != null and sr != null, "All 3 weapon WeaponData resources load")
-	_assert(ar.supported_fire_modes.size() == 2, "AR supports AUTO and SEMI fire modes")
+	_assert(ar.supported_fire_modes.size() == 3, "AK-47 supports AUTO, SEMI, and SAFE fire modes")
 	_assert(sg.pellets_per_shot == 8 and sg.reload_type == WeaponData.ReloadType.SHELL_BY_SHELL, "Shotgun has 8 pellets and shell-by-shell reload")
 	_assert(sr.base_damage > ar.base_damage and sr.ads_fov < ar.ads_fov, "Precision rifle has higher damage and stronger ADS zoom")
 
@@ -342,6 +343,103 @@ func _test_rigged_weapon_models_and_animations() -> void:
 	wm.step(0.02, 0.0, false, true)
 	wm.set_trigger_held(false)
 	_assert(awp_w.current_mag == mag_before - 2, "AWP fires cleanly after bolt cycle completes")
+
+	inst.queue_free()
+	await process_frame
+
+
+func _test_tactical_mechanics_selector_shoulder_lean() -> void:
+	var scene := load("res://src/showcase/training_range.tscn") as PackedScene
+	var inst := scene.instantiate() as RangeController
+	root.add_child(inst)
+	await process_frame
+
+	var p := inst.player
+	var wm := p.weapon_manager
+	var rig := p.camera_rig
+	var vm := rig.viewmodel
+	p.scripted_control = true
+
+	# 1. AK-47 Fire Selector: AUTO -> SEMI -> SAFE -> AUTO
+	var ak := wm.get_current_weapon()
+	_assert(ak.get_current_fire_mode() == WeaponData.FireMode.AUTO, "AK-47 starts in AUTO mode")
+
+	# Start AUTO firing, then switch to SAFE mid-trigger-hold -> MUST stop immediately!
+	wm.set_trigger_held(true)
+	for _i in 6:
+		wm.step(0.02, 0.0, false, true, 0.0)
+	wm.request_cycle_fire_mode() # AUTO -> SEMI
+	_assert(ak.get_current_fire_mode() == WeaponData.FireMode.SEMI, "AK-47 cycles AUTO -> SEMI")
+	wm.request_cycle_fire_mode() # SEMI -> SAFE
+	_assert(ak.get_current_fire_mode() == WeaponData.FireMode.SAFE, "AK-47 cycles SEMI -> SAFE")
+	var mag_at_safe := ak.current_mag
+	for _i in 20:
+		wm.step(0.02, 0.0, false, true, 0.0)
+	wm.set_trigger_held(false)
+	_assert(ak.current_mag == mag_at_safe, "Switching to SAFE immediately prevents further shots while trigger held")
+
+	# Fresh trigger pull in SAFE must also fire 0 rounds
+	wm.set_trigger_held(true)
+	wm.step(0.02, 0.0, false, true, 0.0)
+	wm.set_trigger_held(false)
+	_assert(ak.current_mag == mag_at_safe, "SAFE prevents fresh trigger presses without consuming ammo")
+
+	# Mode persists on AK-47 instance when switching away to SPAS-12 and back!
+	wm._equip_slot_immediate(1)
+	wm._equip_slot_immediate(0)
+	_assert(wm.get_current_weapon().get_current_fire_mode() == WeaponData.FireMode.SAFE, "Selected AK-47 fire mode persists across weapon switching")
+	wm.request_cycle_fire_mode() # SAFE -> AUTO
+	_assert(wm.get_current_weapon().get_current_fire_mode() == WeaponData.FireMode.AUTO, "AK-47 cycles SAFE -> AUTO cleanly")
+
+	# 2. First-Person Shoulder / Weapon-Side Switching (V) across all 3 weapons
+	_assert(is_equal_approx(wm.shoulder_side, 1.0), "Starts on Right shoulder (+1.0)")
+	wm.toggle_shoulder_side()
+	_assert(is_equal_approx(wm.shoulder_side, -1.0), "Toggles cleanly to Left shoulder (-1.0)")
+	for _i in 40:
+		wm.step(0.02, 0.0, false, true, 0.0)
+	_assert(vm.get_shoulder_blend() < -0.95 and vm.position.x < -0.15, "Viewmodel smoothly shifts to Left-side presentation")
+	_assert(vm.scale == Vector3.ONE, "Shoulder switch never uses negative scale hacks (preserves normals/rig)")
+
+	# ADS from Left shoulder MUST still converge cleanly to X=0 center!
+	wm.set_aim_requested(true)
+	for _i in 45:
+		wm.step(0.02, 0.0, false, true, 0.0)
+	_assert(absf(vm.position.x) < 0.015, "ADS converges to exact centerline (X~0) from Left shoulder")
+	wm.set_aim_requested(false)
+
+	# Switch through SPAS-12 & AWP while on Left shoulder -> remains consistent
+	wm._equip_slot_immediate(1)
+	wm.step(0.02, 0.0, false, true, 0.0)
+	_assert(vm.position.x < -0.10, "Left-shoulder presentation works cleanly on SPAS-12")
+	wm._equip_slot_immediate(2)
+	wm.step(0.02, 0.0, false, true, 0.0)
+	_assert(vm.position.x < -0.10, "Left-shoulder presentation works cleanly on AWP")
+	wm.set_shoulder_side(1.0, true)
+	wm._equip_slot_immediate(0)
+
+	# 3. Tactical Leaning (Q/E): smooth roll, lateral displacement, return to neutral, collision-aware wall clamping!
+	p.global_position = Vector3(0.0, 0.2, 6.0)
+	var space := p.get_world_3d().direct_space_state
+	for _i in 45:
+		rig.update_rig(0.02, p.standing_eye_height, 70.0, Vector2.ZERO, 0.0, true, false, 0.0, 1.0, 1.0, space, p, [p.get_rid()])
+	_assert(rig.current_lean_ratio > 0.90 and rig.position.x > 0.40 and rig.rotation_degrees.z < -11.0, "Unobstructed right lean achieves lateral offset and roll")
+
+	# Rapidly switch Q/E -> smooth transition without snapping
+	var prev_x := rig.position.x
+	rig.update_rig(0.02, p.standing_eye_height, 70.0, Vector2.ZERO, 0.0, true, false, 0.0, -1.0, 1.0, space, p, [p.get_rid()])
+	_assert(absf(rig.position.x - prev_x) < 0.25, "Rapidly alternating Q/E interpolates smoothly without snapping")
+
+	# Return to neutral
+	for _i in 50:
+		rig.update_rig(0.02, p.standing_eye_height, 70.0, Vector2.ZERO, 0.0, true, false, 0.0, 0.0, 0.0, space, p, [p.get_rid()])
+	_assert(absf(rig.current_lean_ratio) < 0.02 and absf(rig.rotation_degrees.z) < 0.3, "Releasing Q/E smoothly returns to neutral")
+
+	# Collision-aware wall test: place player 0.28m from LeftWall (wall inner face at X = -14.5) and try leaning left!
+	p.global_position = Vector3(-14.22, 0.2, 0.0)
+	p.rotation = Vector3.ZERO
+	await physics_frame
+	var safe_left := rig.compute_safe_lateral_displacement(space, p, p.standing_eye_height, -rig.max_lean_offset_m, [p.get_rid()])
+	_assert(rig.last_lean_blocked and absf(safe_left) < 0.12, "Collision-aware leaning blocks camera from entering solid walls (safe_left=%.3f)" % safe_left)
 
 	inst.queue_free()
 	await process_frame

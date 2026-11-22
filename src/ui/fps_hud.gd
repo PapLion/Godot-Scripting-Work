@@ -46,12 +46,14 @@ func bind_player(player: FPSPlayer) -> void:
 		_weapon_manager.hit_confirmed.connect(_on_hit_confirmed)
 		_weapon_manager.state_changed.connect(_on_state_changed)
 		_weapon_manager.attachments_updated.connect(_on_attachments_updated)
+		_weapon_manager.shoulder_side_changed.connect(_on_shoulder_side_changed)
 		var current := _weapon_manager.get_current_weapon()
 		if current != null:
 			_on_weapon_equipped(current, _weapon_manager.current_slot)
 			_on_ammo_updated(current.current_mag, current.reserve_ammo, current.stats.magazine_capacity)
 			_on_fire_mode_updated(current.get_current_fire_mode())
 			_on_attachments_updated(current.get_active_attachments())
+			_on_shoulder_side_changed(_weapon_manager.shoulder_side)
 
 	if _health_component != null:
 		_health_component.health_changed.connect(_on_health_changed)
@@ -103,8 +105,24 @@ func _on_ammo_updated(current_mag: int, reserve_ammo: int, max_mag: int) -> void
 
 
 func _on_fire_mode_updated(mode: WeaponData.FireMode) -> void:
-	if _fire_mode_label != null:
-		_fire_mode_label.text = "[%s]" % WeaponData.get_fire_mode_label(mode)
+	if _fire_mode_label == null:
+		return
+	var side_tag := "R" if (_weapon_manager == null or _weapon_manager.shoulder_side >= 0.0) else "L"
+	_fire_mode_label.text = "[%s] [%s]" % [WeaponData.get_fire_mode_label(mode), side_tag]
+	match mode:
+		WeaponData.FireMode.SAFE:
+			_fire_mode_label.modulate = Color(1.0, 0.36, 0.30)
+		WeaponData.FireMode.SEMI:
+			_fire_mode_label.modulate = Color(0.45, 0.92, 1.0)
+		WeaponData.FireMode.BOLT_ACTION:
+			_fire_mode_label.modulate = Color(1.0, 0.84, 0.38)
+		_:
+			_fire_mode_label.modulate = Color(0.75, 0.88, 1.0)
+
+
+func _on_shoulder_side_changed(_side: float) -> void:
+	if _weapon_manager != null and _weapon_manager.get_current_weapon() != null:
+		_on_fire_mode_updated(_weapon_manager.get_current_weapon().get_current_fire_mode())
 
 
 func _on_hit_confirmed(is_critical: bool, is_kill: bool, _total_damage: float) -> void:
@@ -230,7 +248,7 @@ func _build_ui() -> void:
 	hint_panel.offset_top = 14
 	add_child(hint_panel)
 	var hint_lbl := Label.new()
-	hint_lbl.text = "WASD Move | Shift Sprint | C Crouch | LMB Fire | RMB ADS | R Reload | B Mode | 1-3 Weapons | T Reset | F3 Info"
+	hint_lbl.text = "WASD Move | Q/E Lean | V Side | B Mode | LMB Fire | RMB ADS | R Reload | 1-3 Weapons | T Reset | F3 Info"
 	hint_lbl.add_theme_font_size_override("font_size", 11)
 	hint_lbl.modulate = Color(0.82, 0.87, 0.92, 0.9)
 	hint_panel.add_child(hint_lbl)

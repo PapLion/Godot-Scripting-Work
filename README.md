@@ -14,8 +14,9 @@ This project is a standalone, single-player FPS gameplay architecture designed s
 
 | System | Key Scripts | Capabilities |
 | :--- | :--- | :--- |
-| **Data-Driven Weapons** | `WeaponData`, `WeaponInstance`, `EffectiveWeaponStats` | Resource-driven weapon definitions, pure stat composition, safe ammo conservation |
-| **Multi-Dimensional State Machine** | `WeaponStateMachine` | Orthogonal `ActionState`, `AimState`, and `SprintState` dimensions — zero contradictory booleans |
+| **Data-Driven Weapons** | `WeaponData`, `WeaponInstance`, `EffectiveWeaponStats` | Resource-driven weapon definitions, pure stat composition, safe ammo conservation, `AUTO`/`SEMI`/`SAFE`/`BOLT` fire modes |
+| **Multi-Dimensional State Machine** | `WeaponStateMachine` | Orthogonal `ActionState` (incl. `CYCLING_BOLT`), `AimState`, and `SprintState` dimensions — zero contradictory booleans |
+| **Tactical Mechanics** | `FPSCameraRig`, `WeaponManager`, `WeaponViewmodel` | AK-47 `SAFE`/`SEMI`/`AUTO` selector (`B`, animated `selector` bone), smooth Right/Left shoulder switching (`V`), collision-aware `Q`/`E` corner peeking |
 | **Gunplay & Ballistics** | `BallisticSolver`, `RecoilController`, `SpreadController` | Camera-based hitscan & multi-pellet shotgun solver, distance falloff, real camera recoil + recovery, stance/movement/bloom spread |
 | **Reload Mechanics** | `WeaponManager` | Tactical (+1 chamber) & empty magazine reloads, shell-by-shell shotgun loading with immediate fire-interrupt, safe switch cancellation |
 | **Attachments & Modifiers** | `AttachmentData`, `EffectiveWeaponStats` | 4 slots (Optic, Muzzle, Magazine, Underbarrel) with live stat recalculation, ammo conservation, and visual viewmodel indicators |
@@ -67,7 +68,9 @@ All weapons are authored as reusable `.tres` resources under `data/weapons/`, ba
 | `Left Click` | Fire (interrupts shotgun shell reload) |
 | `Right Click` | Aim Down Sights (ADS) |
 | `R` | Reload |
-| `B` | Cycle Fire Mode (`AUTO` / `SEMI`) |
+| `B` | Cycle Fire Selector (`AUTO` / `SEMI` / `SAFE` on AK-47) |
+| `V` | Switch Dominant Weapon Shoulder (`[R]` ↔ `[L]`) |
+| `Q` / `E` | Collision-Aware Tactical Lean & Corner Peek (Left / Right) |
 | `1 / 2 / 3` or `Mouse Wheel` | Switch Weapon |
 | `5 / 6 / 7 / 8` | Toggle Optic / Muzzle / Extended Mag / Tactical Laser |
 | `T` | Reset All Range Targets & Refill Ammo |
@@ -104,7 +107,7 @@ Godot_v4.7.2-stable_win64_console.exe --headless --path . --script res://tests/r
 ## Testing & Verification Summary
 
 - **Static Validation (`validate_scripts`):** 27/27 GDScript files valid, 0 errors.
-- **Automated Suite (`tests/run_tests.gd`):** **62/62 passed**, covering resource loading, distance falloff, attachment stat composition & ammo conservation, state-machine invariants, framerate-independent recoil/spread recovery (60 vs 120 FPS), armor/hitbox multipliers, tactical/empty/shell-by-shell reloads, fire-interrupt, weapon switching, scene instantiation, rigged GLB weapon+hand animations, configurable hand attachment markers, and AWP `BOLT_ACTION` / `CYCLING_BOLT` readiness enforcement.
+- **Automated Suite (`tests/run_tests.gd`):** **80/80 passed**, covering resource loading, distance falloff, attachment stat composition & ammo conservation, state-machine invariants, framerate-independent recoil/spread recovery (60 vs 120 FPS), armor/hitbox multipliers, tactical/empty/shell-by-shell reloads, fire-interrupt, weapon switching, scene instantiation, rigged GLB weapon+hand animations, configurable hand attachment markers, AWP `BOLT_ACTION` / `CYCLING_BOLT` readiness enforcement, AK-47 `SAFE`/`SEMI`/`AUTO` fire selector, smooth Right/Left shoulder switching (without negative scale), and collision-aware `Q`/`E` tactical leaning.
 - **Live Engine Verification (Godot MCP `run_project` + `game_eval` + `game_screenshot`):** Verified zero runtime errors under Vulkan Forward+, real raycast headshots (`2.0x`), armor absorption (`50%` split), multi-pellet shotgun hits, high-zoom precision ADS, and live attachment toggling.
 
 ---

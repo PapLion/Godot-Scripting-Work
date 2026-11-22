@@ -12,6 +12,7 @@ signal reload_started(is_empty: bool, is_shell_by_shell: bool)
 signal reload_finished(was_interrupted: bool)
 signal state_changed(action_state: WeaponStateMachine.ActionState, aim_state: WeaponStateMachine.AimState)
 signal attachments_updated(active_attachments: Array[AttachmentData])
+signal shoulder_side_changed(side: float)
 
 enum ShellReloadStage {
 	NONE = 0,
@@ -31,6 +32,7 @@ var spread_controller := SpreadController.new()
 var loadout: Array[WeaponInstance] = []
 var current_slot: int = -1
 var ads_alpha: float = 0.0
+var shoulder_side: float = 1.0 # +1.0 = Right shoulder, -1.0 = Left shoulder
 
 var _camera: Camera3D
 var _viewmodel: WeaponViewmodel
@@ -158,10 +160,32 @@ func request_cycle_fire_mode() -> bool:
 	if state_machine.action_state in [WeaponStateMachine.ActionState.EQUIPPING, WeaponStateMachine.ActionState.UNEQUIPPING]:
 		return false
 	if weapon.cycle_fire_mode():
+		var next_mode := weapon.get_current_fire_mode()
+		if next_mode == WeaponData.FireMode.SAFE:
+			_burst_remaining = 0
+		if _viewmodel != null:
+			_viewmodel.set_fire_mode_visual(next_mode, false)
 		_play_weapon_sound(&"fire_mode")
-		fire_mode_updated.emit(weapon.get_current_fire_mode())
+		fire_mode_updated.emit(next_mode)
 		return true
 	return false
+
+
+func toggle_shoulder_side() -> float:
+	set_shoulder_side(-shoulder_side)
+	return shoulder_side
+
+
+func set_shoulder_side(side: float, immediate: bool = false) -> void:
+	var target := 1.0 if side >= 0.0 else -1.0
+	if is_equal_approx(target, shoulder_side) and not immediate:
+		return
+	shoulder_side = target
+	if _viewmodel != null:
+		_viewmodel.set_shoulder_side(shoulder_side, immediate)
+	if not immediate:
+		_play_weapon_sound(&"equip")
+	shoulder_side_changed.emit(shoulder_side)
 
 
 func request_switch_slot(slot_index: int) -> bool:
@@ -240,7 +264,8 @@ func step(
 	delta: float,
 	move_ratio: float,
 	is_crouching: bool,
-	is_grounded: bool
+	is_grounded: bool,
+	lean_amount: float = 0.0
 ) -> void:
 	var weapon := get_current_weapon()
 	if weapon == null:
@@ -299,7 +324,8 @@ func step(
 			is_equip_transition,
 			move_ratio,
 			is_grounded,
-			is_cycling_bolt
+			is_cycling_bolt,
+			lean_amount
 		)
 
 
@@ -330,6 +356,11 @@ func _try_trigger_pressed() -> void:
 	if weapon == null:
 		return
 
+	if weapon.get_current_fire_mode() == WeaponData.FireMode.SAFE:
+		_burst_remaining = 0
+		_play_dry_fire()
+		return
+
 	# Interruptible shell-by-shell reload on fire press
 	if state_machine.is_reloading() and _can_interrupt_shell_reload(weapon):
 		_cancel_reload(true)
@@ -346,11 +377,15 @@ func _try_trigger_pressed() -> void:
 
 
 func _step_firing(weapon: WeaponInstance, is_crouching: bool) -> void:
+	var mode := weapon.get_current_fire_mode()
+	if mode == WeaponData.FireMode.SAFE:
+		_burst_remaining = 0
+		return
+
 	if _fire_cooldown > 0.0:
 		return
 
 	var should_fire := false
-	var mode := weapon.get_current_fire_mode()
 
 	if _burst_remaining > 0:
 		should_fire = true

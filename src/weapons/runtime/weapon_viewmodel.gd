@@ -8,6 +8,8 @@ extends Node3D
 var _weapon_root: Node3D
 var _model_instance: Node3D
 var _anim_player: AnimationPlayer
+var _skeleton: Skeleton3D
+var _selector_bone_idx: int = -1
 var _muzzle_point: Node3D
 var _eject_point: Node3D
 var _muzzle_flash_mesh: MeshInstance3D
@@ -23,6 +25,11 @@ var _current_stats: EffectiveWeaponStats
 var _using_rigged_model: bool = false
 
 var _ads_alpha: float = 0.0
+var _shoulder_target: float = 1.0   # +1.0 = Right shoulder, -1.0 = Left shoulder
+var _shoulder_blend: float = 1.0    # Smoothly interpolated [-1.0, +1.0]
+var _selector_target_deg: float = 0.0
+var _selector_current_deg: float = 0.0
+var _selector_nudge: float = 0.0
 var _kick_offset_z: float = 0.0
 var _kick_pitch_deg: float = 0.0
 var _sway_offset: Vector2 = Vector2.ZERO
@@ -62,11 +69,37 @@ func configure_weapon(weapon: WeaponInstance) -> void:
 		_rebuild_procedural_geometry(weapon.data)
 
 	update_attachments(weapon)
-	position = weapon.data.hip_position
+	set_fire_mode_visual(weapon.get_current_fire_mode(), true)
+	var hip := weapon.data.hip_position
+	position = Vector3(hip.x * _shoulder_blend, hip.y, hip.z)
 	rotation_degrees = Vector3.ZERO
 	_kick_offset_z = 0.0
 	_kick_pitch_deg = 0.0
 	play_idle()
+
+
+func set_shoulder_side(side: float, immediate: bool = false) -> void:
+	_shoulder_target = 1.0 if side >= 0.0 else -1.0
+	if immediate:
+		_shoulder_blend = _shoulder_target
+
+
+func get_shoulder_blend() -> float:
+	return _shoulder_blend
+
+
+func set_fire_mode_visual(mode: WeaponData.FireMode, immediate: bool = false) -> void:
+	match mode:
+		WeaponData.FireMode.SAFE:
+			_selector_target_deg = 18.0
+		WeaponData.FireMode.SEMI:
+			_selector_target_deg = -16.0
+		_:
+			_selector_target_deg = 0.0
+	if immediate:
+		_selector_current_deg = _selector_target_deg
+	else:
+		_selector_nudge = 1.0
 
 
 func update_attachments(weapon: WeaponInstance) -> void:
@@ -181,12 +214,28 @@ func update_transform(
 	is_equipping_or_unequipping: bool,
 	move_ratio: float,
 	is_grounded: bool,
-	is_cycling_bolt: bool = false
+	is_cycling_bolt: bool = false,
+	lean_amount: float = 0.0
 ) -> void:
 	if _current_data == null:
 		return
 
 	_ads_alpha = ads_alpha
+	# Smooth shoulder-side transition (-1.0 Left <-> +1.0 Right) without negative scaling
+	_shoulder_blend = lerpf(_shoulder_blend, _shoulder_target, 1.0 - exp(-10.5 * delta))
+	if absf(_shoulder_blend - _shoulder_target) < 0.002:
+		_shoulder_blend = _shoulder_target
+	var shoulder_mid_arc := maxf(0.0, 1.0 - absf(_shoulder_blend)) # peaks at 1.0 mid-cross
+
+	# Animate AK-47 physical selector lever bone smoothly when present
+	_selector_current_deg = lerpf(_selector_current_deg, _selector_target_deg, 1.0 - exp(-18.0 * delta))
+	_selector_nudge = lerpf(_selector_nudge, 0.0, 1.0 - exp(-14.0 * delta))
+	if _skeleton != null and _selector_bone_idx >= 0:
+		_skeleton.set_bone_pose_rotation(
+			_selector_bone_idx,
+			Quaternion.from_euler(Vector3(deg_to_rad(_selector_current_deg), 0.0, 0.0))
+		)
+
 	# Hide 3D sniper viewmodel at full scope-in so HUD mil-dot scope overlay provides clear sight picture,
 	# but keep it visible while cycling the bolt so the right-hand bolt animation is clearly shown!
 	if _current_data.visual_preset == WeaponData.VisualPreset.PRECISION_RIFLE:
@@ -217,13 +266,32 @@ func update_transform(
 	if _using_rigged_model and _anim_player != null and not _anim_player.is_playing() and not is_reloading and not is_equipping_or_unequipping and not is_cycling_bolt:
 		play_idle()
 
+	# Side-aware hip & sprint transforms (ADS always converges cleanly to X=0 center!)
+	var hip_sided := Vector3(_current_data.hip_position.x * _shoulder_blend, _current_data.hip_position.y, _current_data.hip_position.z)
 	var ads_pos := _current_stats.ads_position if _current_stats != null else _current_data.ads_position
-	var base_pos := _current_data.hip_position.lerp(ads_pos, _ads_alpha)
+	var base_pos := hip_sided.lerp(ads_pos, _ads_alpha)
 	var base_rot := Vector3.ZERO
 
+	# Subtle chest-dip arc during shoulder switch (reduced in ADS so sightline stays stable)
+	var arc_weight := lerpf(1.0, 0.25, _ads_alpha)
+	base_pos += Vector3(0.0, -0.045 * shoulder_mid_arc * arc_weight, 0.025 * shoulder_mid_arc * arc_weight)
+	base_rot.z += -9.0 * shoulder_mid_arc * _shoulder_target * arc_weight
+
+	# Subtle left-shoulder yaw cant (keeps weapon barrel converging cleanly toward crosshair center)
+	base_rot.y += lerpf(1.8 * (1.0 - _shoulder_blend) * 0.5, 0.0, _ads_alpha)
+
+	# Tactile selector switch roll nudge
+	base_rot += Vector3(2.2, -3.5, 5.5) * _selector_nudge * lerpf(1.0, 0.25, _ads_alpha)
+
+	# Subtle tactical lean stabilization roll (keeps weapon grounded while corner peeking)
+	base_rot.z += -4.2 * lean_amount * lerpf(1.0, 0.2, _ads_alpha)
+
 	if is_sprinting and _ads_alpha < 0.1 and not is_reloading and not is_equipping_or_unequipping:
-		base_pos = base_pos.lerp(_current_data.sprint_position, 0.85)
-		base_rot = _current_data.sprint_rotation_deg
+		var sp := _current_data.sprint_position
+		var sprint_sided := Vector3(sp.x * _shoulder_blend, sp.y, sp.z)
+		base_pos = base_pos.lerp(sprint_sided, 0.85)
+		var sr := _current_data.sprint_rotation_deg
+		base_rot = Vector3(sr.x, sr.y * _shoulder_blend, sr.z * _shoulder_blend)
 
 	var bob_offset := Vector3.ZERO
 	if is_grounded and move_ratio > 0.08:
@@ -263,6 +331,8 @@ func get_eject_global_transform() -> Transform3D:
 
 func _clear_current_model() -> void:
 	_anim_player = null
+	_skeleton = null
+	_selector_bone_idx = -1
 	_model_instance = null
 	for child in _weapon_root.get_children():
 		if child != _muzzle_point and child != _eject_point:
@@ -279,6 +349,9 @@ func _mount_rigged_scene(scene: PackedScene) -> void:
 	_weapon_root.add_child(_model_instance)
 	_disable_shadows_recursive(_model_instance)
 	_anim_player = _find_animation_player(_model_instance)
+	_skeleton = _find_skeleton(_model_instance)
+	if _skeleton != null:
+		_selector_bone_idx = _skeleton.find_bone("selector")
 
 	# Anchor muzzle & eject points to imported Blender markers
 	var m_node := _find_node_by_name(_model_instance, "MuzzlePoint")
@@ -316,6 +389,16 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 		return node as AnimationPlayer
 	for child in node.get_children():
 		var found := _find_animation_player(child)
+		if found != null:
+			return found
+	return null
+
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node as Skeleton3D
+	for child in node.get_children():
+		var found := _find_skeleton(child)
 		if found != null:
 			return found
 	return null
