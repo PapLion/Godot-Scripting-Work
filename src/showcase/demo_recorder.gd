@@ -55,6 +55,12 @@ func _physics_process(delta: float) -> void:
 			_run_clip7_tactical_lean()
 		"tactical_shots":
 			_run_tactical_screenshots()
+		"penetration_demo":
+			_run_clip8_surface_penetration()
+		"vfx_surfaces_demo":
+			_run_clip9_combat_vfx_surfaces()
+		"pen_vfx_shots":
+			_run_pen_vfx_screenshots()
 		"shots":
 			_run_screenshots_only()
 
@@ -543,4 +549,99 @@ func _run_tactical_screenshots() -> void:
 	if _step_idx == 2 and t >= 1.8:
 		_step_idx = 3
 		_save_shot("08_tactical_lean_corner_peek.png")
+		get_tree().quit(0)
+
+
+func _run_clip8_surface_penetration() -> void:
+	# 10s clip: Surface Penetration comparison — Thick Concrete (blocked) vs Thin Wood (penetrates) vs Glass (shatters & penetrates) vs Drywall!
+	var t := _elapsed
+	if _step_idx == 0:
+		_step_idx = 1
+		_player.global_position = Vector3(-8.2, 0.2, 3.6)
+		_aim_target = Vector3(-5.4, 1.05, -2.2) # Thick Concrete
+		_smooth_aim = _aim_target
+	# 0.8-2.4s: Shoot Thick Concrete (blocks shots, concrete dust/debris)
+	if t >= 0.8 and t < 2.2:
+		_wm.set_aim_requested(true)
+		_wm.set_trigger_held(t >= 1.1 and t < 1.9)
+	# 2.4-5.2s: Pan to Thin Wood (penetrates -> entry/exit splinters + damages TargetBehindWood!)
+	elif t >= 2.2 and t < 5.0:
+		_aim_target = Vector3(-7.6, 1.0, -4.6)
+		_wm.set_trigger_held(t >= 3.0 and t < 4.3)
+	# 5.0-7.6s: Pan to Glass (shattering glass shards + high-retention penetration on TargetBehindGlass!)
+	elif t >= 5.0 and t < 7.6:
+		_aim_target = Vector3(-9.8, 1.0, -4.6)
+		_wm.set_trigger_held(t >= 5.7 and t < 6.9)
+	# 7.6-9.5s: Pan to Drywall (plaster dust clouds)
+	elif t >= 7.6 and t < 9.5:
+		_aim_target = Vector3(-11.8, 1.05, -2.2)
+		_wm.set_trigger_held(t >= 8.2 and t < 9.0)
+	else:
+		_wm.set_trigger_held(false)
+		_wm.set_aim_requested(false)
+	if t >= 9.6:
+		get_tree().quit(0)
+
+
+func _run_clip9_combat_vfx_surfaces() -> void:
+	# 9s clip: Combat VFX Showcase — Steel Plate sparks, Concrete dust, Timber splinters + Muzzle flash/smoke/shells (AK-47 & SPAS-12)
+	var t := _elapsed
+	if _step_idx == 0:
+		_step_idx = 1
+		_player.global_position = Vector3(4.5, 0.2, 0.5)
+		_aim_target = Vector3(11.3, 1.35, 0.6) # Concrete
+		_smooth_aim = _aim_target
+	if t >= 0.6 and t < 2.4:
+		_wm.set_trigger_held(t >= 0.8 and t < 1.8)
+	elif t >= 2.4 and t < 4.6:
+		_aim_target = Vector3(11.3, 1.35, -2.0) # Steel Plate (golden spark shower!)
+		_wm.set_trigger_held(t >= 2.9 and t < 4.2)
+	elif t >= 4.6 and t < 6.2:
+		_wm.set_trigger_held(false)
+		if _step_idx == 1:
+			_step_idx = 2
+			_wm.request_switch_slot(1) # SPAS-12 shotgun blast smoke & muzzle flash!
+		_aim_target = Vector3(11.3, 1.35, -4.6) # Timber
+	elif t >= 6.2 and t < 8.5:
+		if _step_idx == 2 and t >= 6.4:
+			_step_idx = 3
+			_wm.set_trigger_held(true)
+		elif _step_idx == 3 and t >= 6.6:
+			_step_idx = 4
+			_wm.set_trigger_held(false)
+			_aim_target = Vector3(11.3, 1.35, -2.0) # Steel blast
+		elif _step_idx == 4 and t >= 7.5:
+			_step_idx = 5
+			_wm.set_trigger_held(true)
+		elif _step_idx == 5 and t >= 7.7:
+			_step_idx = 6
+			_wm.set_trigger_held(false)
+	if t >= 8.8:
+		get_tree().quit(0)
+
+
+func _run_pen_vfx_screenshots() -> void:
+	var t := _elapsed
+	if _step_idx == 0:
+		_step_idx = 1
+		_player.global_position = Vector3(-8.4, 0.2, 3.2)
+		_aim_target = Vector3(-7.6, 1.05, -4.6) # Shoot through Thin Wood into TargetBehindWood
+		_smooth_aim = _aim_target
+	if _step_idx == 1 and t >= 0.45:
+		_step_idx = 2
+		_wm.set_trigger_held(true)
+	if _step_idx == 2 and t >= 0.72:
+		_step_idx = 3
+		_wm.set_trigger_held(false)
+		_save_shot("09_penetration_wood_glass.png")
+		_player.global_position = Vector3(5.0, 0.2, -1.5)
+		_aim_target = Vector3(11.3, 1.35, -2.0) # Steel Plate sparks + star muzzle flash
+		_smooth_aim = _aim_target
+	if _step_idx == 3 and t >= 1.25:
+		_step_idx = 4
+		_wm.set_trigger_held(true)
+	if _step_idx == 4 and t >= 1.52:
+		_step_idx = 5
+		_wm.set_trigger_held(false)
+		_save_shot("10_vfx_metal_sparks_muzzle.png")
 		get_tree().quit(0)

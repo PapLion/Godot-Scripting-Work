@@ -40,6 +40,8 @@ enum VisualPreset {
 @export_range(0.1, 1.0, 0.05) var min_falloff_multiplier: float = 0.55
 @export var max_ray_distance: float = 250.0
 @export var impact_impulse: float = 4.0
+@export var penetration_power: float = 2.0
+@export var max_penetrations: int = 3
 
 @export_group("Ammunition & Reload")
 @export var magazine_capacity: int = 30

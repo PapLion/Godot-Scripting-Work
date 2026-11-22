@@ -84,16 +84,36 @@ func _build_range_environment() -> void:
 		_add_label("%dm" % d, Vector3(-13.8, 1.4, z_pos), 46, Vector3(0.0, 90.0, 0.0))
 		_add_label("%dm" % d, Vector3(13.8, 1.4, z_pos), 46, Vector3(0.0, -90.0, 0.0))
 
-	# Multi-surface ballistic impact test wall on the right lane
+	# Multi-surface ballistic impact test wall on the right lane (Concrete, Steel, Wood, Glass, Drywall)
 	var panel_z := -2.0
-	_add_static_box("SurfaceConcrete", Vector3(0.35, 2.6, 2.4), Vector3(11.5, 1.3, panel_z + 2.8), concrete_mat, SurfaceMaterialType.Type.CONCRETE)
-	_add_label("CONCRETE", Vector3(11.2, 2.9, panel_z + 2.8), 32, Vector3(0.0, -90.0, 0.0))
+	_add_static_box("SurfaceConcrete", Vector3(0.35, 2.6, 2.2), Vector3(11.5, 1.3, panel_z + 2.6), concrete_mat, SurfaceMaterialType.Type.CONCRETE)
+	_add_label("CONCRETE", Vector3(11.2, 2.9, panel_z + 2.6), 30, Vector3(0.0, -90.0, 0.0))
 
-	_add_static_box("SurfaceMetal", Vector3(0.35, 2.6, 2.4), Vector3(11.5, 1.3, panel_z), metal_mat, SurfaceMaterialType.Type.METAL)
-	_add_label("STEEL PLATE", Vector3(11.2, 2.9, panel_z), 32, Vector3(0.0, -90.0, 0.0))
+	_add_static_box("SurfaceMetal", Vector3(0.35, 2.6, 2.2), Vector3(11.5, 1.3, panel_z), metal_mat, SurfaceMaterialType.Type.METAL)
+	_add_label("STEEL PLATE", Vector3(11.2, 2.9, panel_z), 30, Vector3(0.0, -90.0, 0.0))
 
-	_add_static_box("SurfaceWood", Vector3(0.35, 2.6, 2.4), Vector3(11.5, 1.3, panel_z - 2.8), wood_mat, SurfaceMaterialType.Type.WOOD)
-	_add_label("TIMBER", Vector3(11.2, 2.9, panel_z - 2.8), 32, Vector3(0.0, -90.0, 0.0))
+	_add_static_box("SurfaceWood", Vector3(0.35, 2.6, 2.2), Vector3(11.5, 1.3, panel_z - 2.6), wood_mat, SurfaceMaterialType.Type.WOOD)
+	_add_label("TIMBER", Vector3(11.2, 2.9, panel_z - 2.6), 30, Vector3(0.0, -90.0, 0.0))
+
+	# Dedicated Surface Penetration Test Bay (left lane: Thin Wood, Glass, Drywall vs Thick Concrete!)
+	var glass_mat := StandardMaterial3D.new()
+	glass_mat.albedo_color = Color(0.62, 0.88, 0.98, 0.34)
+	glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass_mat.roughness = 0.08
+	glass_mat.metallic = 0.15
+	var drywall_mat := _make_mat(Color(0.84, 0.84, 0.81), 0.02, 0.90)
+
+	_add_static_box("PenPanelWood", Vector3(1.8, 2.1, 0.08), Vector3(-7.6, 1.05, -2.2), wood_mat, SurfaceMaterialType.Type.WOOD)
+	_add_label("THIN WOOD (8cm)\nPENETRABLE", Vector3(-7.6, 2.45, -2.1), 24)
+
+	_add_static_box("PenPanelGlass", Vector3(1.8, 2.1, 0.04), Vector3(-9.8, 1.05, -2.2), glass_mat, SurfaceMaterialType.Type.GLASS)
+	_add_label("GLASS (4cm)\nPENETRABLE", Vector3(-9.8, 2.45, -2.1), 24)
+
+	_add_static_box("PenPanelDrywall", Vector3(1.5, 2.1, 0.06), Vector3(-11.8, 1.05, -2.2), drywall_mat, SurfaceMaterialType.Type.DRYWALL)
+	_add_label("DRYWALL (6cm)\nPENETRABLE", Vector3(-11.8, 2.45, -2.1), 24)
+
+	_add_static_box("PenWallConcrete", Vector3(1.8, 2.1, 0.55), Vector3(-5.4, 1.05, -2.2), concrete_mat, SurfaceMaterialType.Type.CONCRETE)
+	_add_label("THICK CONCRETE\nBLOCKS SHOTS", Vector3(-5.4, 2.45, -1.85), 24)
 
 	# Range signage on backstop
 	_add_label("GODOT SYSTEMS LAB  //  01-ADVANCED-FPS RANGE", Vector3(0.0, 6.2, -81.2), 72)
@@ -117,6 +137,11 @@ func _spawn_range_targets() -> void:
 
 	# 6. Long-range moving target (65m)
 	_add_target("TargetLongMoving65m", "MOVING 65m", Vector3(2.2, 0.0, -59.0), 100.0, 0.0, true, 5.0, 1.4)
+
+	# 7-9. Penetration test targets placed directly behind Thin Wood, Glass, and Thick Concrete!
+	_add_target("TargetBehindWood", "BEHIND WOOD", Vector3(-7.6, 0.0, -4.6), 100.0, 0.0, false, 0.0, 0.0)
+	_add_target("TargetBehindGlass", "BEHIND GLASS", Vector3(-9.8, 0.0, -4.6), 100.0, 0.0, false, 0.0, 0.0)
+	_add_target("TargetBehindConcrete", "BEHIND CONCRETE", Vector3(-5.4, 0.0, -4.6), 100.0, 0.0, false, 0.0, 0.0)
 
 
 func _add_target(

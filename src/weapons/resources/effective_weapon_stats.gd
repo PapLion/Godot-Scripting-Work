@@ -11,6 +11,8 @@ var max_falloff_range: float = 100.0
 var min_falloff_multiplier: float = 0.5
 var max_ray_distance: float = 250.0
 var impact_impulse: float = 4.0
+var penetration_power: float = 2.0
+var max_penetrations: int = 3
 
 var magazine_capacity: int = 30
 var tactical_reload_duration: float = 1.6
@@ -88,6 +90,8 @@ static func compute(base: WeaponData, attachments: Array[AttachmentData]) -> Eff
 	stats.min_falloff_multiplier = clampf(base.min_falloff_multiplier, 0.1, 1.0)
 	stats.max_ray_distance = base.max_ray_distance
 	stats.impact_impulse = base.impact_impulse
+	stats.penetration_power = maxf(0.0, base.penetration_power)
+	stats.max_penetrations = maxi(0, base.max_penetrations)
 
 	stats.magazine_capacity = maxi(1, int(round(float(base.magazine_capacity) * mag_mult)) + mag_bonus)
 	stats.tactical_reload_duration = maxf(0.25, base.tactical_reload_duration * reload_mult)

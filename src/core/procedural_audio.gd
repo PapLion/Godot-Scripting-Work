@@ -48,6 +48,10 @@ static func get_sound(sound_id: StringName) -> AudioStreamWAV:
 			stream = _synth_tone_burst(0.11, 2600.0, 1950.0, 0.45)
 		&"impact_wood":
 			stream = _synth_gunshot(0.065, 220.0, 95.0, 0.35, 36.0, 505)
+		&"impact_glass":
+			stream = _synth_double_chime(0.12, 3200.0, 4600.0, 0.42)
+		&"impact_drywall":
+			stream = _synth_gunshot(0.055, 160.0, 75.0, 0.30, 40.0, 555)
 		&"footstep":
 			stream = _synth_gunshot(0.05, 95.0, 45.0, 0.22, 42.0, 606)
 		_:

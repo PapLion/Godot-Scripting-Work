@@ -22,6 +22,7 @@ func _run_all() -> void:
 	await _test_training_range_scene_instantiation()
 	await _test_rigged_weapon_models_and_animations()
 	await _test_tactical_mechanics_selector_shoulder_lean()
+	await _test_surface_penetration_and_vfx_lifecycle()
 
 	print("--------------------------------------------")
 	print("TOTAL: %d passed, %d failed" % [_passed, _failed])
@@ -265,7 +266,7 @@ func _test_training_range_scene_instantiation() -> void:
 	_assert(inst.player.weapon_manager.loadout.size() == 3, "Player loadout contains all 3 configured weapons")
 	_assert(inst.player.weapon_manager.available_attachments.size() == 4, "Player has all 4 configured attachments available")
 	var targets := get_nodes_in_group("range_targets")
-	_assert(targets.size() == 6, "TrainingRange spawns all 6 practice targets (static, armored, moving)")
+	_assert(targets.size() == 9, "TrainingRange spawns all 9 practice & penetration targets")
 	inst.queue_free()
 	await process_frame
 
@@ -440,6 +441,62 @@ func _test_tactical_mechanics_selector_shoulder_lean() -> void:
 	await physics_frame
 	var safe_left := rig.compute_safe_lateral_displacement(space, p, p.standing_eye_height, -rig.max_lean_offset_m, [p.get_rid()])
 	_assert(rig.last_lean_blocked and absf(safe_left) < 0.12, "Collision-aware leaning blocks camera from entering solid walls (safe_left=%.3f)" % safe_left)
+
+	inst.queue_free()
+	await process_frame
+
+
+func _test_surface_penetration_and_vfx_lifecycle() -> void:
+	var scene := load("res://src/showcase/training_range.tscn") as PackedScene
+	var inst := scene.instantiate() as RangeController
+	root.add_child(inst)
+	await process_frame
+	await physics_frame
+
+	var p := inst.player
+	var wm := p.weapon_manager
+	var space := p.get_world_3d().direct_space_state
+	var ak_stats := wm.get_current_weapon().stats
+	var no_spread := SpreadController.new(77)
+
+	# 1. Thin Wood (8cm) -> AK-47 penetrates, produces entry + exit hits, and damages TargetBehindWood with reduced damage!
+	var t_wood := inst.targets_root.get_node("TargetBehindWood") as TargetDummy
+	var wood_target_pos := (t_wood.get_node("Pivot/BodyHitbox") as Node3D).global_position
+	var cam_wood := Transform3D(Basis.looking_at((wood_target_pos - Vector3(-7.6, 1.0, 2.0)).normalized(), Vector3.UP), Vector3(-7.6, 1.0, 2.0))
+	var sum_wood := BallisticSolver.fire_shot(space, cam_wood, cam_wood.origin, &"ar_m4_carbine", ak_stats, no_spread, 0.0, [p.get_rid()], p)
+	var has_wood_exit := false
+	for h in sum_wood.hits:
+		if h.is_exit and h.surface_type == SurfaceMaterialType.Type.WOOD:
+			has_wood_exit = true
+	_assert(sum_wood.penetration_count >= 1 and has_wood_exit, "AK-47 penetrates thin wood panel with distinct entry and exit points")
+	_assert(sum_wood.any_damageable_hit and sum_wood.total_damage > 0.0 and sum_wood.total_damage < ak_stats.base_damage, "Post-wood penetration reduces damage cleanly (%.1f < %.1f)" % [sum_wood.total_damage, ak_stats.base_damage])
+
+	# 2. Glass (4cm) -> penetrates with high damage retention (> 80% of base damage)
+	var t_glass := inst.targets_root.get_node("TargetBehindGlass") as TargetDummy
+	var glass_target_pos := (t_glass.get_node("Pivot/BodyHitbox") as Node3D).global_position
+	var cam_glass := Transform3D(Basis.looking_at((glass_target_pos - Vector3(-9.8, 1.0, 2.0)).normalized(), Vector3.UP), Vector3(-9.8, 1.0, 2.0))
+	var sum_glass := BallisticSolver.fire_shot(space, cam_glass, cam_glass.origin, &"ar_m4_carbine", ak_stats, no_spread, 0.0, [p.get_rid()], p)
+	_assert(sum_glass.penetration_count >= 1 and sum_glass.total_damage > ak_stats.base_damage * 0.80, "Glass penetration preserves high damage retention (%.1f)" % sum_glass.total_damage)
+
+	# 3. Thick Concrete (55cm) -> blocks AK-47 completely (0 damage to TargetBehindConcrete!)
+	var t_conc := inst.targets_root.get_node("TargetBehindConcrete") as TargetDummy
+	var conc_target_pos := (t_conc.get_node("Pivot/BodyHitbox") as Node3D).global_position
+	var cam_conc := Transform3D(Basis.looking_at((conc_target_pos - Vector3(-5.4, 1.0, 2.0)).normalized(), Vector3.UP), Vector3(-5.4, 1.0, 2.0))
+	var sum_conc := BallisticSolver.fire_shot(space, cam_conc, cam_conc.origin, &"ar_m4_carbine", ak_stats, no_spread, 0.0, [p.get_rid()], p)
+	_assert(sum_conc.penetration_count == 0 and not sum_conc.any_damageable_hit and is_equal_approx(t_conc.health_component.current_health, 100.0), "Thick concrete wall blocks AK-47 shots (target HP remains 100)")
+
+	# 4. Heavy Steel Plate -> blocks AK-47 shots
+	var cam_metal := Transform3D(Basis.looking_at(Vector3.RIGHT, Vector3.UP), Vector3(7.0, 1.3, -2.0))
+	var sum_metal := BallisticSolver.fire_shot(space, cam_metal, cam_metal.origin, &"ar_m4_carbine", ak_stats, no_spread, 0.0, [p.get_rid()], p)
+	_assert(sum_metal.penetration_count == 0 and sum_metal.hits.size() == 1 and sum_metal.hits[0].surface_type == SurfaceMaterialType.Type.METAL, "Heavy metal barrier blocks rifle rounds")
+
+	# 5. Combat VFX lifecycle & bounded budgets (LOW quality cap = 20 decals / 20 active effects)
+	var fx := inst.fx_manager
+	fx.quality = ImpactFXManager.VFXQuality.LOW
+	for _i in 35:
+		fx.spawn_shot_fx(sum_metal, Color.YELLOW)
+	_assert(fx.get_active_decal_count() <= fx.get_max_decals(), "VFX decal pool enforces strict upper bound (%d <= %d)" % [fx.get_active_decal_count(), fx.get_max_decals()])
+	_assert(fx.get_active_effect_count() <= fx.get_max_effects(), "VFX particle effect tracker enforces strict upper bound (%d <= %d)" % [fx.get_active_effect_count(), fx.get_max_effects()])
 
 	inst.queue_free()
 	await process_frame

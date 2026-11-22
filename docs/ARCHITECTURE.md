@@ -49,6 +49,9 @@ TargetDummy / Any Damageable Entity
 3. **Collision-Aware Tactical Leaning (`Q` / `E`):** `FPSCameraRig.compute_safe_lateral_displacement()` performs a dual-depth World-layer ray clearance probe from the player's neutral head center with a `0.24m` wall margin before applying lateral displacement (`±0.44m`) and proportional camera Z-roll (`±13.5°`).
    - *Exposure Model & Limitation:* Because this is a single-player capsule controller without a full third-person upper-body mesh, corner peeking displaces the camera & weapon viewmodel within collision-validated world space while the player's `CharacterBody3D` capsule remains anchored behind cover. Ballistic rays originate strictly from the collision-clamped camera eye so shots cannot pass through solid walls.
 
+4. **Configurable Surface Penetration (`SurfaceMaterialType` + `BallisticSolver`):** Each weapon defines `penetration_power` and `max_penetrations`. On World-layer impact, `BallisticSolver` evaluates material resistance + backward thickness probing (`_probe_exit_point`), deducts `min_entry_cost + thickness * resistance_per_meter`, reduces remaining damage by `damage_retention`, records distinct entry and exit `HitResult`s for VFX, and prevents duplicate hits on the same `HealthComponent` per pellet.
+5. **Centralized Combat VFX Framework (`ImpactFXManager`):** Event-driven `GPUParticles3D` + decal + tracer + muzzle-smoke spawner with selectable `VFXQuality` (`LOW`/`MEDIUM`/`HIGH`) and hard upper bounds on active decals and particle nodes.
+
 ---
 
 ## Signal Flow

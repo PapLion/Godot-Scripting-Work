@@ -196,8 +196,11 @@ func trigger_fire_kick() -> void:
 	if _muzzle_flash_mesh != null:
 		_muzzle_flash_mesh.visible = true
 		_muzzle_flash_mesh.rotation.z = randf_range(0.0, TAU)
+		var f_scale := 1.45 if _current_data.visual_preset == WeaponData.VisualPreset.SHOTGUN else (1.25 if _current_data.visual_preset == WeaponData.VisualPreset.PRECISION_RIFLE else 1.0)
+		_muzzle_flash_mesh.scale = Vector3.ONE * f_scale
 	if _muzzle_flash_light != null:
 		_muzzle_flash_light.visible = true
+		_muzzle_flash_light.light_energy = 3.8 if _current_data.visual_preset == WeaponData.VisualPreset.SHOTGUN else 2.8
 	play_fire()
 
 
@@ -440,22 +443,35 @@ func _play_rig_anim_to_duration(anim_name: String, target_duration: float, blend
 
 
 func _build_muzzle_flash() -> void:
+	# Multi-layered crossed star muzzle flash (crisp core + radial flame fins)
 	_muzzle_flash_mesh = MeshInstance3D.new()
-	var prism := BoxMesh.new()
-	prism.size = Vector3(0.085, 0.085, 0.02)
-	_muzzle_flash_mesh.mesh = prism
+	var core := BoxMesh.new()
+	core.size = Vector3(0.045, 0.045, 0.065)
+	_muzzle_flash_mesh.mesh = core
 	_muzzle_flash_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color(1.0, 0.86, 0.42)
+	mat.albedo_color = Color(1.0, 0.90, 0.48, 0.92)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_muzzle_flash_mesh.material_override = mat
+
+	for ang in [0.0, 60.0, 120.0]:
+		var fin := MeshInstance3D.new()
+		var fm := BoxMesh.new()
+		fm.size = Vector3(0.14, 0.018, 0.045)
+		fin.mesh = fm
+		fin.material_override = mat
+		fin.rotation_degrees.z = ang
+		fin.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_muzzle_flash_mesh.add_child(fin)
+
 	_muzzle_flash_mesh.visible = false
 	_muzzle_point.add_child(_muzzle_flash_mesh)
 
 	_muzzle_flash_light = OmniLight3D.new()
-	_muzzle_flash_light.light_color = Color(1.0, 0.78, 0.35)
-	_muzzle_flash_light.light_energy = 2.6
-	_muzzle_flash_light.omni_range = 4.5
+	_muzzle_flash_light.light_color = Color(1.0, 0.80, 0.36)
+	_muzzle_flash_light.light_energy = 2.8
+	_muzzle_flash_light.omni_range = 5.0
 	_muzzle_flash_light.visible = false
 	_muzzle_point.add_child(_muzzle_flash_light)
 

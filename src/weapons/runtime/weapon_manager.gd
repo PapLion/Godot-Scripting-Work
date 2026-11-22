@@ -42,6 +42,7 @@ var _exclude_rids: Array[RID] = []
 
 var _fire_cooldown: float = 0.0
 var _dry_fire_cooldown: float = 0.0
+var _barrel_heat: float = 0.0
 var _action_timer: float = 0.0
 var _pending_slot: int = -1
 var _shell_stage: ShellReloadStage = ShellReloadStage.NONE
@@ -275,6 +276,8 @@ func step(
 		_fire_cooldown = maxf(0.0, _fire_cooldown - delta)
 	if _dry_fire_cooldown > 0.0:
 		_dry_fire_cooldown = maxf(0.0, _dry_fire_cooldown - delta)
+	if _barrel_heat > 0.0:
+		_barrel_heat = maxf(0.0, _barrel_heat - delta * 0.32)
 
 	# Action state timers (Reload, Equip, Unequip)
 	_step_action_timers(delta, weapon)
@@ -459,7 +462,13 @@ func _execute_shot(weapon: WeaponInstance, is_crouching: bool) -> void:
 	_play_weapon_sound(weapon.data.fire_sound_id)
 
 	if _fx_manager != null:
+		summary.visual_preset = weapon.data.visual_preset
 		_fx_manager.spawn_shot_fx(summary, weapon.data.tracer_color)
+		if _camera != null:
+			var m_pos := _viewmodel.get_muzzle_global_position() if _viewmodel != null else _camera.global_position
+			var fwd := -_camera.global_transform.basis.z.normalized()
+			_barrel_heat = minf(1.0, _barrel_heat + 0.14)
+			_fx_manager.spawn_muzzle_smoke(m_pos, fwd, weapon.data.visual_preset, _barrel_heat)
 
 	if eject_shells_enabled and _viewmodel != null and is_inside_tree():
 		_spawn_ejected_shell(weapon.data)
