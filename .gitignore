@@ -1,0 +1,16 @@
+# Godot 4
+.godot/
+*.translation
+export_presets.cfg
+.import/
+
+# Blender backups
+*.blend1
+*.blend2
+
+# Temporary captures & OS files
+*.avi
+*.tmp
+portfolio_media/tmp/
+.DS_Store
+Thumbs.db
