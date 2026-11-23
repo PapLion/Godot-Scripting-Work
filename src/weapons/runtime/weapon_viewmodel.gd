@@ -1,17 +1,26 @@
 class_name WeaponViewmodel
 extends Node3D
-## First-person weapon viewmodel supporting rigged, animated glTF/GLB assets (with procedural fallback).
-## Synchronizes AnimationPlayer playback with WeaponManager events, aligns ADS sightlines,
-## anchors muzzle flash / shell ejection / modular attachments to imported rig markers,
-## and guarantees clean reset on reload interruption or weapon switching.
+## First-person weapon viewmodel with strict single-root hierarchy and Blender-first animation ownership.
+##
+## Architecture:
+##   WeaponViewmodel (Node3D)
+##     └── RuntimeOffsetPivot (Node3D: Godot owns lightweight ADS, sway, bob, kick, shoulder, lean)
+##           └── <Imported GLB Scene> (Blender owns all poses, reloads, bolt cycling, shell loading)
+##                 └── Skeleton3D
+##                       ├── Att_Optic_Holo / Att_Muzzle_Comp / Att_Mag_Ext / Att_Underbarrel_Laser
+##                       │     (rigidly skinned to weapon_body / magazine bones -> zero floating parts!)
+##                       └── WeaponBodyBoneAttachment (BoneAttachment3D -> "weapon_body")
+##                             ├── MuzzlePoint (MuzzleFlashMesh + MuzzleFlashLight)
+##                             └── EjectPoint
 
-var _weapon_root: Node3D
+var _runtime_pivot: Node3D
 var _model_instance: Node3D
 var _anim_player: AnimationPlayer
 var _skeleton: Skeleton3D
+var _body_bone_attachment: BoneAttachment3D
 var _selector_bone_idx: int = -1
-var _muzzle_point: Node3D
-var _eject_point: Node3D
+var _muzzle_point: Marker3D
+var _eject_point: Marker3D
 var _muzzle_flash_mesh: MeshInstance3D
 var _muzzle_flash_light: OmniLight3D
 
@@ -35,22 +44,22 @@ var _kick_pitch_deg: float = 0.0
 var _sway_offset: Vector2 = Vector2.ZERO
 var _bob_time: float = 0.0
 var _muzzle_flash_timer: float = 0.0
-var _reload_anim_alpha: float = 0.0
-var _equip_anim_alpha: float = 0.0
+var _fallback_reload_alpha: float = 0.0
+var _fallback_equip_alpha: float = 0.0
 
 
 func _ready() -> void:
-	_weapon_root = Node3D.new()
-	_weapon_root.name = "WeaponMeshRoot"
-	add_child(_weapon_root)
+	_runtime_pivot = Node3D.new()
+	_runtime_pivot.name = "RuntimeOffsetPivot"
+	add_child(_runtime_pivot)
 
 	_muzzle_point = Marker3D.new()
 	_muzzle_point.name = "MuzzlePoint"
-	_weapon_root.add_child(_muzzle_point)
+	_runtime_pivot.add_child(_muzzle_point)
 
 	_eject_point = Marker3D.new()
 	_eject_point.name = "EjectPoint"
-	_weapon_root.add_child(_eject_point)
+	_runtime_pivot.add_child(_eject_point)
 
 	_build_muzzle_flash()
 
@@ -58,6 +67,7 @@ func _ready() -> void:
 func configure_weapon(weapon: WeaponInstance) -> void:
 	if weapon == null or weapon.data == null:
 		return
+	_ensure_initialized()
 	_current_data = weapon.data
 	_current_stats = weapon.stats
 	_clear_current_model()
@@ -66,13 +76,16 @@ func configure_weapon(weapon: WeaponInstance) -> void:
 		_mount_rigged_scene(weapon.data.viewmodel_scene)
 	else:
 		_using_rigged_model = false
-		_rebuild_procedural_geometry(weapon.data)
+		_rebuild_procedural_fallback(weapon.data)
 
 	update_attachments(weapon)
 	set_fire_mode_visual(weapon.get_current_fire_mode(), true)
+
 	var hip := weapon.data.hip_position
 	position = Vector3(hip.x * _shoulder_blend, hip.y, hip.z)
 	rotation_degrees = Vector3.ZERO
+	_runtime_pivot.position = Vector3.ZERO
+	_runtime_pivot.rotation_degrees = Vector3.ZERO
 	_kick_offset_z = 0.0
 	_kick_pitch_deg = 0.0
 	play_idle()
@@ -117,7 +130,8 @@ func update_attachments(weapon: WeaponInstance) -> void:
 
 
 func play_idle() -> void:
-	_play_rig_anim("idle", 1.0, 0.12, true)
+	var target_anim := "ads_idle" if (_ads_alpha >= 0.65 and _has_anim("ads_idle")) else "idle"
+	_play_rig_anim(target_anim, 1.0, 0.14, true)
 
 
 func play_fire() -> void:
@@ -126,24 +140,16 @@ func play_fire() -> void:
 
 func play_bolt_action(target_duration: float) -> void:
 	if _has_anim("bolt_action"):
-		_play_rig_anim_to_duration("bolt_action", target_duration, 0.05)
+		_play_rig_anim_to_duration("bolt_action", target_duration, 0.06)
 	elif _has_anim("bolt"):
-		_play_rig_anim_to_duration("bolt", target_duration, 0.05)
+		_play_rig_anim_to_duration("bolt", target_duration, 0.06)
 
 
-func get_hand_anchors() -> Dictionary:
-	var anchors: Dictionary = {}
-	if _model_instance == null:
-		return anchors
-	for marker_name in ["GripPrimary", "GripSupport", "MagInteract", "BoltInteract", "ShellPort", "ADSRef"]:
-		var n := _find_node_by_name(_model_instance, marker_name)
-		if n is Node3D:
-			anchors[marker_name] = (n as Node3D).position
-	return anchors
-
-
-func play_reload_magazine(target_duration: float) -> void:
-	_play_rig_anim_to_duration("reload", target_duration, 0.08)
+func play_reload_magazine(target_duration: float, is_empty: bool = false) -> void:
+	if is_empty and _has_anim("reload_empty"):
+		_play_rig_anim_to_duration("reload_empty", target_duration, 0.08)
+	else:
+		_play_rig_anim_to_duration("reload", target_duration, 0.08)
 
 
 func play_shell_start(target_duration: float) -> void:
@@ -155,15 +161,14 @@ func play_shell_insert(target_duration: float) -> void:
 
 
 func play_shell_end(target_duration: float) -> void:
-	_play_rig_anim_to_duration("shell_end", target_duration, 0.05)
+	_play_rig_anim_to_duration("shell_end", target_duration, 0.06)
 
 
 func play_reload_interrupt() -> void:
 	if _has_anim("reload_interrupt"):
-		_play_rig_anim("reload_interrupt", 1.2, 0.04, false)
+		_play_rig_anim("reload_interrupt", 1.15, 0.04, false)
 	else:
-		# Snap cleanly back to idle rest pose so no magazine or shell remains detached
-		_play_rig_anim("idle", 1.0, 0.06, true)
+		_play_rig_anim("idle", 1.0, 0.08, true)
 
 
 func play_equip(target_duration: float) -> void:
@@ -171,7 +176,7 @@ func play_equip(target_duration: float) -> void:
 
 
 func play_unequip(target_duration: float) -> void:
-	_play_rig_anim_to_duration("unequip", target_duration, 0.04)
+	_play_rig_anim_to_duration("unequip", target_duration, 0.05)
 
 
 func get_animation_names() -> PackedStringArray:
@@ -186,12 +191,46 @@ func get_current_animation() -> String:
 	return _anim_player.current_animation
 
 
+func get_skeleton() -> Skeleton3D:
+	return _skeleton
+
+
+func get_body_bone_attachment() -> BoneAttachment3D:
+	return _body_bone_attachment
+
+
+func get_runtime_pivot() -> Node3D:
+	return _runtime_pivot
+
+
+func get_attachment_nodes() -> Dictionary:
+	return {
+		"optic": _att_optic_node,
+		"muzzle": _att_muzzle_node,
+		"magazine": _att_mag_node,
+		"underbarrel": _att_laser_node,
+	}
+
+
+func get_hand_anchors() -> Dictionary:
+	var anchors: Dictionary = {}
+	if _model_instance == null:
+		return anchors
+	for marker_name in ["GripPrimary", "GripSupport", "MagInteract", "BoltInteract", "ShellPort", "ADSRef"]:
+		var n := _find_node_by_name(_model_instance, marker_name)
+		if n is Node3D:
+			var skel_xf := _get_transform_relative_to_skeleton(n as Node3D)
+			anchors[marker_name] = skel_xf.origin
+	return anchors
+
+
 func trigger_fire_kick() -> void:
 	if _current_data == null:
 		return
-	var kick_scale := 0.55 if _using_rigged_model else 1.0
-	_kick_offset_z = minf(_kick_offset_z + _current_data.viewmodel_kickback_z * kick_scale, _current_data.viewmodel_kickback_z * 2.0)
-	_kick_pitch_deg = minf(_kick_pitch_deg + _current_data.viewmodel_kick_pitch_deg * kick_scale, _current_data.viewmodel_kick_pitch_deg * 2.0)
+	# Compact outer runtime kickback complements Blender's authored fire animation without double-kicking
+	var kick_scale := 0.42 if _using_rigged_model else 1.0
+	_kick_offset_z = minf(_kick_offset_z + _current_data.viewmodel_kickback_z * kick_scale, _current_data.viewmodel_kickback_z * 1.65)
+	_kick_pitch_deg = minf(_kick_pitch_deg + _current_data.viewmodel_kick_pitch_deg * kick_scale, _current_data.viewmodel_kick_pitch_deg * 1.65)
 	_muzzle_flash_timer = 0.045
 	if _muzzle_flash_mesh != null:
 		_muzzle_flash_mesh.visible = true
@@ -205,8 +244,8 @@ func trigger_fire_kick() -> void:
 
 
 func add_look_sway(mouse_delta: Vector2) -> void:
-	_sway_offset.x = clampf(_sway_offset.x - mouse_delta.x * 0.00016, -0.022, 0.022)
-	_sway_offset.y = clampf(_sway_offset.y + mouse_delta.y * 0.00016, -0.018, 0.018)
+	_sway_offset.x = clampf(_sway_offset.x - mouse_delta.x * 0.00014, -0.020, 0.020)
+	_sway_offset.y = clampf(_sway_offset.y + mouse_delta.y * 0.00014, -0.016, 0.016)
 
 
 func update_transform(
@@ -220,17 +259,18 @@ func update_transform(
 	is_cycling_bolt: bool = false,
 	lean_amount: float = 0.0
 ) -> void:
-	if _current_data == null:
+	if _current_data == null or _runtime_pivot == null:
 		return
 
 	_ads_alpha = ads_alpha
+
 	# Smooth shoulder-side transition (-1.0 Left <-> +1.0 Right) without negative scaling
 	_shoulder_blend = lerpf(_shoulder_blend, _shoulder_target, 1.0 - exp(-10.5 * delta))
 	if absf(_shoulder_blend - _shoulder_target) < 0.002:
 		_shoulder_blend = _shoulder_target
-	var shoulder_mid_arc := maxf(0.0, 1.0 - absf(_shoulder_blend)) # peaks at 1.0 mid-cross
+	var shoulder_mid_arc := maxf(0.0, 1.0 - absf(_shoulder_blend))
 
-	# Animate AK-47 physical selector lever bone smoothly when present
+	# Smoothly rotate physical AK-47 selector lever bone (not keyframed in Blender actions)
 	_selector_current_deg = lerpf(_selector_current_deg, _selector_target_deg, 1.0 - exp(-18.0 * delta))
 	_selector_nudge = lerpf(_selector_nudge, 0.0, 1.0 - exp(-14.0 * delta))
 	if _skeleton != null and _selector_bone_idx >= 0:
@@ -240,22 +280,16 @@ func update_transform(
 		)
 
 	# Hide 3D sniper viewmodel at full scope-in so HUD mil-dot scope overlay provides clear sight picture,
-	# but keep it visible while cycling the bolt so the right-hand bolt animation is clearly shown!
+	# while keeping it visible during reload, equip, and bolt cycling!
 	if _current_data.visual_preset == WeaponData.VisualPreset.PRECISION_RIFLE:
 		visible = (_ads_alpha < 0.78) or is_reloading or is_equipping_or_unequipping or is_cycling_bolt
 	else:
 		visible = true
 
-	var kick_decay := 1.0 - exp(-18.0 * delta)
+	var kick_decay := 1.0 - exp(-19.0 * delta)
 	_kick_offset_z = lerpf(_kick_offset_z, 0.0, kick_decay)
 	_kick_pitch_deg = lerpf(_kick_pitch_deg, 0.0, kick_decay)
-	_sway_offset = _sway_offset.lerp(Vector2.ZERO, 1.0 - exp(-10.0 * delta))
-
-	# Procedural fallback weights (zeroed when rigged AnimationPlayer owns reload/equip)
-	var reload_target := 0.0 if _using_rigged_model else (1.0 if is_reloading else 0.0)
-	var equip_target := 0.0 if _using_rigged_model else (1.0 if is_equipping_or_unequipping else 0.0)
-	_reload_anim_alpha = lerpf(_reload_anim_alpha, reload_target, 1.0 - exp(-10.0 * delta))
-	_equip_anim_alpha = lerpf(_equip_anim_alpha, equip_target, 1.0 - exp(-12.0 * delta))
+	_sway_offset = _sway_offset.lerp(Vector2.ZERO, 1.0 - exp(-11.0 * delta))
 
 	if _muzzle_flash_timer > 0.0:
 		_muzzle_flash_timer -= delta
@@ -265,31 +299,38 @@ func update_transform(
 			if _muzzle_flash_light != null:
 				_muzzle_flash_light.visible = false
 
-	# Keep rigged weapons returning smoothly to idle when non-looping anims end
-	if _using_rigged_model and _anim_player != null and not _anim_player.is_playing() and not is_reloading and not is_equipping_or_unequipping and not is_cycling_bolt:
-		play_idle()
+	# Keep rigged weapons cleanly in idle / ads_idle when authored non-looping clips finish
+	if _using_rigged_model and _anim_player != null and not is_reloading and not is_equipping_or_unequipping and not is_cycling_bolt:
+		var desired_idle := "ads_idle" if (_ads_alpha >= 0.65 and _has_anim("ads_idle")) else "idle"
+		if not _anim_player.is_playing():
+			_play_rig_anim(desired_idle, 1.0, 0.14, true)
+		elif _anim_player.current_animation in ["idle", "ads_idle"] and _anim_player.current_animation != desired_idle:
+			_play_rig_anim(desired_idle, 1.0, 0.14, true)
 
-	# Side-aware hip & sprint transforms (ADS always converges cleanly to X=0 center!)
+	# Outer runtime positioning on RuntimeOffsetPivot (never competes with imported Skeleton3D bone animations!)
 	var hip_sided := Vector3(_current_data.hip_position.x * _shoulder_blend, _current_data.hip_position.y, _current_data.hip_position.z)
 	var ads_pos := _current_stats.ads_position if _current_stats != null else _current_data.ads_position
 	var base_pos := hip_sided.lerp(ads_pos, _ads_alpha)
 	var base_rot := Vector3.ZERO
 
-	# Subtle chest-dip arc during shoulder switch (reduced in ADS so sightline stays stable)
-	var arc_weight := lerpf(1.0, 0.25, _ads_alpha)
-	base_pos += Vector3(0.0, -0.045 * shoulder_mid_arc * arc_weight, 0.025 * shoulder_mid_arc * arc_weight)
-	base_rot.z += -9.0 * shoulder_mid_arc * _shoulder_target * arc_weight
+	# Subtle chest-dip arc during shoulder switch (suppressed during ADS so sightline stays stable)
+	var arc_weight := lerpf(1.0, 0.22, _ads_alpha)
+	base_pos += Vector3(0.0, -0.042 * shoulder_mid_arc * arc_weight, 0.022 * shoulder_mid_arc * arc_weight)
+	base_rot.z += -8.0 * shoulder_mid_arc * _shoulder_target * arc_weight
 
-	# Subtle left-shoulder yaw cant (keeps weapon barrel converging cleanly toward crosshair center)
-	base_rot.y += lerpf(1.8 * (1.0 - _shoulder_blend) * 0.5, 0.0, _ads_alpha)
+	# Subtle left-shoulder yaw convergence toward crosshair
+	base_rot.y += lerpf(1.6 * (1.0 - _shoulder_blend) * 0.5, 0.0, _ads_alpha)
 
-	# Tactile selector switch roll nudge
-	base_rot += Vector3(2.2, -3.5, 5.5) * _selector_nudge * lerpf(1.0, 0.25, _ads_alpha)
+	# Tactile selector lever nudge
+	base_rot += Vector3(1.8, -2.8, 4.5) * _selector_nudge * lerpf(1.0, 0.20, _ads_alpha)
 
-	# Subtle tactical lean stabilization roll (keeps weapon grounded while corner peeking)
-	base_rot.z += -4.2 * lean_amount * lerpf(1.0, 0.2, _ads_alpha)
+	# Subtle tactical lean stabilization counter-roll
+	base_rot.z += -3.8 * lean_amount * lerpf(1.0, 0.18, _ads_alpha)
 
-	if is_sprinting and _ads_alpha < 0.1 and not is_reloading and not is_equipping_or_unequipping:
+	# Dampen outer procedural motion when an authored Blender reload/bolt/equip clip is active
+	var action_quiet := 0.35 if (is_reloading or is_cycling_bolt or is_equipping_or_unequipping) else 1.0
+
+	if is_sprinting and _ads_alpha < 0.1 and not is_reloading and not is_equipping_or_unequipping and not is_cycling_bolt:
 		var sp := _current_data.sprint_position
 		var sprint_sided := Vector3(sp.x * _shoulder_blend, sp.y, sp.z)
 		base_pos = base_pos.lerp(sprint_sided, 0.85)
@@ -298,22 +339,24 @@ func update_transform(
 
 	var bob_offset := Vector3.ZERO
 	if is_grounded and move_ratio > 0.08:
-		_bob_time += delta * (9.5 if is_sprinting else 6.8)
-		var bob_amp := lerpf(0.010, 0.0015, _ads_alpha) * minf(move_ratio, 1.2)
+		_bob_time += delta * (9.2 if is_sprinting else 6.6)
+		var bob_amp := lerpf(0.0085, 0.0012, _ads_alpha) * minf(move_ratio, 1.2) * action_quiet
 		bob_offset.x = cos(_bob_time * 0.5) * bob_amp
-		bob_offset.y = absf(sin(_bob_time)) * bob_amp * 0.85
+		bob_offset.y = absf(sin(_bob_time)) * bob_amp * 0.80
 
-	var reload_pos := Vector3(0.0, -0.09, 0.03) * _reload_anim_alpha
-	var reload_rot := Vector3(14.0, -18.0, 26.0) * _reload_anim_alpha
-	var equip_pos := Vector3(0.0, -0.24, 0.05) * _equip_anim_alpha
-	var equip_rot := Vector3(-32.0, 0.0, 0.0) * _equip_anim_alpha
-
-	var sway_scale := lerpf(1.0, 0.18, _ads_alpha)
+	var sway_scale := lerpf(1.0, 0.16, _ads_alpha) * action_quiet
 	var sway_vec := Vector3(_sway_offset.x * sway_scale, _sway_offset.y * sway_scale, 0.0)
 	var kick_vec := Vector3(0.0, 0.0, _kick_offset_z)
 
-	var target_pos := base_pos + bob_offset + sway_vec + kick_vec + reload_pos + equip_pos
-	var target_rot := base_rot + reload_rot + equip_rot + Vector3(_kick_pitch_deg, 0.0, 0.0)
+	var target_pos := base_pos + bob_offset + sway_vec + kick_vec
+	var target_rot := base_rot + Vector3(_kick_pitch_deg, 0.0, 0.0)
+
+	# Non-rigged fallback only (zeroed for all Blender rigged weapons!)
+	if not _using_rigged_model:
+		_fallback_reload_alpha = lerpf(_fallback_reload_alpha, 1.0 if is_reloading else 0.0, 1.0 - exp(-10.0 * delta))
+		_fallback_equip_alpha = lerpf(_fallback_equip_alpha, 1.0 if is_equipping_or_unequipping else 0.0, 1.0 - exp(-12.0 * delta))
+		target_pos += Vector3(0.0, -0.09, 0.03) * _fallback_reload_alpha + Vector3(0.0, -0.24, 0.05) * _fallback_equip_alpha
+		target_rot += Vector3(14.0, -18.0, 26.0) * _fallback_reload_alpha + Vector3(-32.0, 0.0, 0.0) * _fallback_equip_alpha
 
 	var blend := 1.0 - exp(-22.0 * delta)
 	position = position.lerp(target_pos, blend)
@@ -332,12 +375,52 @@ func get_eject_global_transform() -> Transform3D:
 	return global_transform
 
 
+func _ensure_initialized() -> void:
+	if _runtime_pivot != null:
+		return
+	_runtime_pivot = Node3D.new()
+	_runtime_pivot.name = "RuntimeOffsetPivot"
+	add_child(_runtime_pivot)
+
+	_muzzle_point = Marker3D.new()
+	_muzzle_point.name = "MuzzlePoint"
+	_runtime_pivot.add_child(_muzzle_point)
+
+	_eject_point = Marker3D.new()
+	_eject_point.name = "EjectPoint"
+	_runtime_pivot.add_child(_eject_point)
+
+	_build_muzzle_flash()
+
+
+func _reparent_marker_cleanly(marker: Node3D, new_parent: Node) -> void:
+	if marker == null or new_parent == null or marker.get_parent() == new_parent:
+		return
+	if marker.get_parent() != null:
+		marker.get_parent().remove_child(marker)
+	new_parent.add_child(marker)
+
+
 func _clear_current_model() -> void:
+	# Detach reusable MuzzlePoint & EjectPoint BEFORE freeing old model/BoneAttachment3D!
+	_reparent_marker_cleanly(_muzzle_point, _runtime_pivot)
+	_reparent_marker_cleanly(_eject_point, _runtime_pivot)
+	if _muzzle_point != null:
+		_muzzle_point.transform = Transform3D.IDENTITY
+	if _eject_point != null:
+		_eject_point.transform = Transform3D.IDENTITY
+
 	_anim_player = null
 	_skeleton = null
+	_body_bone_attachment = null
 	_selector_bone_idx = -1
 	_model_instance = null
-	for child in _weapon_root.get_children():
+	_att_optic_node = null
+	_att_muzzle_node = null
+	_att_mag_node = null
+	_att_laser_node = null
+
+	for child in _runtime_pivot.get_children():
 		if child != _muzzle_point and child != _eject_point:
 			child.queue_free()
 
@@ -349,35 +432,68 @@ func _mount_rigged_scene(scene: PackedScene) -> void:
 		return
 
 	_using_rigged_model = true
-	_weapon_root.add_child(_model_instance)
+	_runtime_pivot.add_child(_model_instance)
 	_disable_shadows_recursive(_model_instance)
 	_anim_player = _find_animation_player(_model_instance)
 	_skeleton = _find_skeleton(_model_instance)
+
+	# Resolve Blender-authored bone-skinned modular attachment meshes (zero floating parts!)
+	_att_optic_node = _find_node_by_name(_model_instance, "Att_Optic_Holo") as Node3D
+	_att_muzzle_node = _find_node_by_name(_model_instance, "Att_Muzzle_Comp") as Node3D
+	_att_mag_node = _find_node_by_name(_model_instance, "Att_Mag_Ext") as Node3D
+	_att_laser_node = _find_node_by_name(_model_instance, "Att_Underbarrel_Laser") as Node3D
+	for att_n in [_att_optic_node, _att_muzzle_node, _att_mag_node, _att_laser_node]:
+		if att_n != null:
+			att_n.visible = false
+
+	# Bind MuzzlePoint & EjectPoint directly onto Skeleton3D's `weapon_body` via BoneAttachment3D!
 	if _skeleton != null:
 		_selector_bone_idx = _skeleton.find_bone("selector")
+		var body_bone_idx := _skeleton.find_bone("weapon_body")
+		if body_bone_idx >= 0:
+			_body_bone_attachment = BoneAttachment3D.new()
+			_body_bone_attachment.name = "WeaponBodyBoneAttachment"
+			_body_bone_attachment.bone_name = "weapon_body"
+			_skeleton.add_child(_body_bone_attachment)
 
-	# Anchor muzzle & eject points to imported Blender markers
-	var m_node := _find_node_by_name(_model_instance, "MuzzlePoint")
-	_muzzle_point.position = m_node.position if m_node is Node3D else Vector3(0.0, 0.02, -0.60)
-	var e_node := _find_node_by_name(_model_instance, "EjectPoint")
-	_eject_point.position = e_node.position if e_node is Node3D else Vector3(0.035, 0.03, -0.06)
+			var rest_xf: Transform3D = _skeleton.get_bone_global_rest(body_bone_idx)
+			var rest_inv: Transform3D = rest_xf.affine_inverse()
 
-	# Anchor attachment indicators to imported Blender mount markers
-	var opt_pos := _get_marker_pos(_model_instance, "OpticMount", Vector3(0.0, 0.06, -0.04))
-	var muz_pos := _get_marker_pos(_model_instance, "MuzzleMount", _muzzle_point.position)
-	var mag_pos := _get_marker_pos(_model_instance, "MagMount", Vector3(0.0, -0.14, -0.10))
-	var las_pos := _get_marker_pos(_model_instance, "LaserMount", Vector3(0.028, 0.01, -0.32))
+			var m_node := _find_node_by_name(_model_instance, "MuzzlePoint")
+			var muzzle_skel_xf := _get_transform_relative_to_skeleton(m_node as Node3D) if m_node is Node3D else Transform3D(Basis.IDENTITY, Vector3(0.0, 0.02, -0.60))
+			_reparent_marker_cleanly(_muzzle_point, _body_bone_attachment)
+			_muzzle_point.transform = rest_inv * muzzle_skel_xf
 
-	var att_accent := _make_mat(Color(0.18, 0.19, 0.21), 0.72, 0.34)
-	var glow_mat := _make_mat(Color(0.15, 0.95, 0.45), 0.0, 0.2, true)
-	_build_attachment_nodes(opt_pos, muz_pos, mag_pos, las_pos, att_accent, glow_mat)
+			var e_node := _find_node_by_name(_model_instance, "EjectPoint")
+			var eject_skel_xf := _get_transform_relative_to_skeleton(e_node as Node3D) if e_node is Node3D else Transform3D(Basis.IDENTITY, Vector3(0.035, 0.03, -0.06))
+			_reparent_marker_cleanly(_eject_point, _body_bone_attachment)
+			_eject_point.transform = rest_inv * eject_skel_xf
+			return
+
+	# Fallback if a custom GLB lacks a weapon_body bone
+	var fallback_m := _find_node_by_name(_model_instance, "MuzzlePoint")
+	_muzzle_point.position = (fallback_m as Node3D).position if fallback_m is Node3D else Vector3(0.0, 0.02, -0.60)
+	var fallback_e := _find_node_by_name(_model_instance, "EjectPoint")
+	_eject_point.position = (fallback_e as Node3D).position if fallback_e is Node3D else Vector3(0.035, 0.03, -0.06)
 
 
-func _get_marker_pos(root_node: Node, marker_name: String, fallback: Vector3) -> Vector3:
-	var n := _find_node_by_name(root_node, marker_name)
-	if n is Node3D:
-		return (n as Node3D).position
-	return fallback
+func _get_transform_relative_to_skeleton(node: Node3D) -> Transform3D:
+	if node == null:
+		return Transform3D.IDENTITY
+	var xf := Transform3D.IDENTITY
+	var cur: Node = node
+	while cur != null and cur != _skeleton and cur != _model_instance:
+		if cur is BoneAttachment3D and _skeleton != null:
+			var ba := cur as BoneAttachment3D
+			var b_idx := _skeleton.find_bone(ba.bone_name)
+			if b_idx >= 0:
+				xf = _skeleton.get_bone_global_rest(b_idx) * xf
+			else:
+				xf = ba.transform * xf
+		elif cur is Node3D:
+			xf = (cur as Node3D).transform * xf
+		cur = cur.get_parent()
+	return xf
 
 
 func _disable_shadows_recursive(node: Node) -> void:
@@ -443,10 +559,9 @@ func _play_rig_anim_to_duration(anim_name: String, target_duration: float, blend
 
 
 func _build_muzzle_flash() -> void:
-	# Multi-layered crossed star muzzle flash (crisp core + radial flame fins)
 	_muzzle_flash_mesh = MeshInstance3D.new()
 	var core := BoxMesh.new()
-	core.size = Vector3(0.045, 0.045, 0.065)
+	core.size = Vector3(0.042, 0.042, 0.062)
 	_muzzle_flash_mesh.mesh = core
 	_muzzle_flash_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat := StandardMaterial3D.new()
@@ -455,10 +570,11 @@ func _build_muzzle_flash() -> void:
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_muzzle_flash_mesh.material_override = mat
 
-	for ang in [0.0, 60.0, 120.0]:
+	var fin_angles := PackedFloat32Array([0.0, 60.0, 120.0])
+	for ang in fin_angles:
 		var fin := MeshInstance3D.new()
 		var fm := BoxMesh.new()
-		fm.size = Vector3(0.14, 0.018, 0.045)
+		fm.size = Vector3(0.135, 0.016, 0.042)
 		fin.mesh = fm
 		fin.material_override = mat
 		fin.rotation_degrees.z = ang
@@ -476,73 +592,18 @@ func _build_muzzle_flash() -> void:
 	_muzzle_point.add_child(_muzzle_flash_light)
 
 
-func _rebuild_procedural_geometry(data: WeaponData) -> void:
-	var body_mat := _make_mat(data.accent_color, 0.45, 0.42)
-	var dark_mat := _make_mat(Color(0.11, 0.12, 0.14), 0.65, 0.38)
-	var sight_mat := _make_mat(Color(0.15, 0.95, 0.45), 0.0, 0.2, true)
-	var att_accent := _make_mat(Color(0.75, 0.56, 0.22), 0.55, 0.35)
-	_add_box_to(_weapon_root, Vector3(0.06, 0.08, 0.45), Vector3(0.0, 0.0, -0.15), body_mat)
-	_muzzle_point.position = Vector3(0.0, 0.01, -0.45)
-	_eject_point.position = Vector3(0.04, 0.02, -0.04)
-	_build_attachment_nodes(Vector3(0.0, 0.06, -0.04), Vector3(0.0, 0.01, -0.45), Vector3(0.0, -0.12, -0.12), Vector3(0.036, 0.0, -0.30), att_accent, sight_mat)
-
-
-func _build_attachment_nodes(
-	optic_pos: Vector3,
-	muzzle_pos: Vector3,
-	mag_pos: Vector3,
-	laser_pos: Vector3,
-	accent_mat: StandardMaterial3D,
-	glow_mat: StandardMaterial3D
-) -> void:
-	_att_optic_node = Node3D.new()
-	_att_optic_node.position = optic_pos
-	_att_optic_node.visible = false
-	_weapon_root.add_child(_att_optic_node)
-	_add_box_to(_att_optic_node, Vector3(0.040, 0.010, 0.078), Vector3(0.0, 0.005, 0.0), accent_mat)
-	_add_box_to(_att_optic_node, Vector3(0.006, 0.036, 0.056), Vector3(-0.018, 0.024, 0.0), accent_mat)
-	_add_box_to(_att_optic_node, Vector3(0.006, 0.036, 0.056), Vector3(0.018, 0.024, 0.0), accent_mat)
-	_add_box_to(_att_optic_node, Vector3(0.040, 0.006, 0.056), Vector3(0.0, 0.042, 0.0), accent_mat)
-	var red_dot_mat := _make_mat(Color(1.0, 0.16, 0.16), 0.0, 0.2, true)
-	_add_box_to(_att_optic_node, Vector3(0.004, 0.004, 0.004), Vector3(0.0, 0.024, -0.012), red_dot_mat)
-
-	_att_muzzle_node = Node3D.new()
-	_att_muzzle_node.position = muzzle_pos
-	_att_muzzle_node.visible = false
-	_weapon_root.add_child(_att_muzzle_node)
-	_add_box_to(_att_muzzle_node, Vector3(0.032, 0.028, 0.088), Vector3(0.0, 0.0, -0.042), accent_mat)
-
-	_att_mag_node = Node3D.new()
-	_att_mag_node.position = mag_pos
-	_att_mag_node.visible = false
-	_weapon_root.add_child(_att_mag_node)
-	_add_box_to(_att_mag_node, Vector3(0.036, 0.065, 0.068), Vector3.ZERO, accent_mat)
-
-	_att_laser_node = Node3D.new()
-	_att_laser_node.position = laser_pos
-	_att_laser_node.visible = false
-	_weapon_root.add_child(_att_laser_node)
-	_add_box_to(_att_laser_node, Vector3(0.022, 0.022, 0.082), Vector3.ZERO, accent_mat)
-	_add_box_to(_att_laser_node, Vector3(0.006, 0.006, 0.008), Vector3(0.0, 0.0, -0.044), glow_mat)
-
-
-func _add_box_to(parent: Node3D, size: Vector3, pos: Vector3, mat: Material, rot_deg: Vector3 = Vector3.ZERO) -> void:
+func _rebuild_procedural_fallback(data: WeaponData) -> void:
+	var body_mat := StandardMaterial3D.new()
+	body_mat.albedo_color = data.accent_color
+	body_mat.metallic = 0.45
+	body_mat.roughness = 0.42
 	var mi := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
-	mesh.size = size
+	mesh.size = Vector3(0.06, 0.08, 0.45)
 	mi.mesh = mesh
-	mi.material_override = mat
-	mi.position = pos
-	mi.rotation_degrees = rot_deg
+	mi.material_override = body_mat
+	mi.position = Vector3(0.0, 0.0, -0.15)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(mi)
-
-
-func _make_mat(color: Color, metallic: float, roughness: float, unshaded: bool = false) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = color
-	m.metallic = metallic
-	m.roughness = roughness
-	if unshaded:
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	return m
+	_runtime_pivot.add_child(mi)
+	_muzzle_point.position = Vector3(0.0, 0.01, -0.45)
+	_eject_point.position = Vector3(0.04, 0.02, -0.04)

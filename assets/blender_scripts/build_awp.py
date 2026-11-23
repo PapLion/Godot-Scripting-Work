@@ -1,11 +1,15 @@
-"""Builds, rigs, animates, renders, and exports the AWP Precision Rifle (.blend + .glb)."""
+"""Overhauled Hard-Surface AWP Precision Rifle Builder (.blend + hero/alt/exploded renders).
+Features sculpted olive-drab Accuracy International thumbhole chassis, adjustable cheek rest,
+fluted free-float steel barrel, machined muzzle brake, high-detail variable scope with knurled
+turrets & scope rings, ergonomic bolt handle, bone-parented mounts & bone-skinned attachments.
+"""
 
 import math
 import os
 import sys
 import bpy
 import bmesh
-from mathutils import Vector
+from mathutils import Vector, Matrix
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
@@ -18,13 +22,17 @@ from weapon_build_utils import (
     add_box_to_bm,
     add_cyl_to_bm,
     add_lathe_y,
-    add_extruded_profile_x,
+    add_fluted_barrel_y,
+    add_lofted_sections_y,
+    make_arch_ring,
+    make_oval_ring,
+    add_rounded_profile_x,
+    add_picatinny_rail_y,
     join_objects,
     build_armature,
     bind_mesh_rigid_to_bone,
-    add_marker_empty,
-    create_action_from_keyframes,
-    export_glb,
+    add_bone_marker_empty,
+    build_modular_attachments_for_weapon,
     save_blend,
     render_studio_views,
 )
@@ -37,143 +45,176 @@ RENDER_DIR = os.path.join(PROJECT_ROOT, "portfolio_media", "models")
 def build_awp():
     reset_scene()
 
-    # Materials
-    mat_olive = create_pbr_material("AWP_OliveChassis", (0.19, 0.27, 0.16), metallic=0.04, roughness=0.58, pattern='polymer', seed=201)
-    mat_steel_matte = create_pbr_material("AWP_MatteSteel", (0.11, 0.12, 0.13), metallic=0.86, roughness=0.40, pattern='metal', seed=212)
-    mat_bolt_steel = create_pbr_material("AWP_BoltSteel", (0.42, 0.44, 0.47), metallic=0.94, roughness=0.22, pattern='metal', seed=223)
-    mat_rubber = create_pbr_material("AWP_RubberPad", (0.06, 0.062, 0.068), metallic=0.0, roughness=0.82, pattern='polymer', seed=234)
-    mat_scope_lens = create_pbr_material("AWP_ScopeLens", (0.08, 0.24, 0.36), metallic=0.25, roughness=0.06, pattern='glass', seed=245, emission_color=(0.06, 0.22, 0.34), emission_strength=0.35)
+    mat_olive = create_pbr_material("AWP_OliveChassis", (0.145, 0.215, 0.125), metallic=0.04, roughness=0.56, pattern='polymer', seed=201, normal_strength=0.18)
+    mat_steel_matte = create_pbr_material("AWP_MatteSteel", (0.112, 0.118, 0.130), metallic=0.86, roughness=0.36, pattern='metal', seed=212, normal_strength=0.15)
+    mat_bolt_steel = create_pbr_material("AWP_BoltSteel", (0.50, 0.52, 0.55), metallic=0.95, roughness=0.19, pattern='metal', seed=223, normal_strength=0.10)
+    mat_rubber = create_pbr_material("AWP_RubberPad", (0.065, 0.068, 0.075), metallic=0.0, roughness=0.78, pattern='polymer', seed=234, normal_strength=0.20)
+    mat_scope_lens = create_pbr_material("AWP_ScopeLens", (0.08, 0.25, 0.38), metallic=0.25, roughness=0.05, pattern='glass', seed=245, normal_strength=0.0, emission_color=(0.06, 0.22, 0.36), emission_strength=0.35)
 
     body_parts = []
 
-    # 1. Iconic Olive-Drab AWP Thumbhole Chassis (built around thumbhole opening!)
+    # 1. Sculpted Olive-Drab Accuracy International Thumbhole Chassis
     bm = bmesh.new()
-    # Forend chassis (Y: 0.02 to 0.42)
-    add_extruded_profile_x(bm, [
-        (0.02, 0.024), (0.42, 0.020), (0.41, -0.024), (0.02, -0.032)
-    ], width_x=0.044)
-    # Upper stock spine (above thumbhole, Y: -0.32 to +0.02)
-    add_extruded_profile_x(bm, [
-        (-0.32, 0.020), (0.02, 0.024), (0.02, -0.008), (-0.32, -0.012)
-    ], width_x=0.040)
-    # Lower stock bar (below thumbhole, Y: -0.32 to -0.065)
-    add_extruded_profile_x(bm, [
-        (-0.32, -0.072), (-0.19, -0.072), (-0.15, -0.105),
-        (-0.075, -0.115), (-0.075, -0.095), (-0.16, -0.056), (-0.32, -0.056)
-    ], width_x=0.036)
-    # Rear stock vertical web (behind thumbhole)
-    add_extruded_profile_x(bm, [
-        (-0.32, 0.020), (-0.18, 0.018), (-0.18, -0.072), (-0.32, -0.072)
-    ], width_x=0.038)
-    # Pistol grip strut (front of thumbhole)
-    add_extruded_profile_x(bm, [
-        (-0.065, -0.004), (-0.024, -0.004),
-        (-0.048, -0.115), (-0.088, -0.112)
-    ], width_x=0.034)
-    body_parts.append(finalize_mesh("AWP_Chassis", bm, mat_olive, bevel_width=0.0035))
+    # Contoured forend chassis with chamfered lower bevels & sling-swivel nose
+    add_lofted_sections_y(bm, [
+        (0.005, make_arch_ring(0.044, -0.032, 0.022, 0.004, bevel=0.0055)),
+        (0.240, make_arch_ring(0.043, -0.028, 0.021, 0.004, bevel=0.0055)),
+        (0.415, make_arch_ring(0.038, -0.022, 0.019, 0.004, bevel=0.0050)),
+        (0.432, make_arch_ring(0.032, -0.014, 0.016, 0.003, bevel=0.0045)),
+    ])
+    # Upper spine & buttstock body with smoothly arched thumbhole ceiling
+    add_rounded_profile_x(bm, [
+        (-0.322, 0.020), (0.016, 0.023), (0.016, -0.012),
+        (-0.042, -0.012), (-0.072, -0.004), (-0.112, 0.001),
+        (-0.152, -0.006), (-0.175, -0.022), (-0.184, -0.076), (-0.322, -0.076)
+    ], width_x=0.040, chamfer_x=0.0055, chamfer_in=0.0030)
+    # Smoothly curved lower thumbhole bridge & toe connecting flush into pistol grip
+    add_rounded_profile_x(bm, [
+        (-0.322, -0.056), (-0.172, -0.056), (-0.148, -0.074),
+        (-0.118, -0.092), (-0.072, -0.092), (-0.056, -0.112),
+        (-0.114, -0.116), (-0.156, -0.098), (-0.192, -0.076), (-0.322, -0.076)
+    ], width_x=0.036, chamfer_x=0.0050, chamfer_in=0.0025)
+    # Ergonomically contoured curved pistol grip (rounded oval loft, zero blocky step!)
+    grip_rings = []
+    for gy, gz, rx, ry_h in [
+        (-0.042, -0.004, 0.0170, 0.022),
+        (-0.048, -0.034, 0.0180, 0.023),
+        (-0.058, -0.068, 0.0185, 0.024),
+        (-0.070, -0.102, 0.0180, 0.025),
+        (-0.074, -0.116, 0.0165, 0.023),
+    ]:
+        grip_rings.append([bm.verts.new((math.cos(s / 16.0 * math.tau) * rx, gy + math.sin(s / 16.0 * math.tau) * ry_h, gz)) for s in range(16)])
+    for r_i in range(len(grip_rings) - 1):
+        r0, r1 = grip_rings[r_i], grip_rings[r_i + 1]
+        for s in range(16):
+            ns = (s + 1) % 16
+            bm.faces.new((r0[s], r0[ns], r1[ns], r1[s]))
+    bm.faces.new(list(reversed(grip_rings[0])))
+    bm.faces.new(grip_rings[-1])
+    body_parts.append(finalize_mesh("AWP_Chassis", bm, mat_olive, bevel_width=0.0010, split_angle_deg=40.0))
 
-    # 2. Black Rubber Buttpad & Cheek Rest
+    # Signature Accuracy International dark-steel chassis hex fasteners along olive side panels
     bm = bmesh.new()
-    add_box_to_bm(bm, (0.042, 0.026, 0.108), (0.0, -0.335, -0.024))
-    # Adjustable cheek piece
-    add_box_to_bm(bm, (0.043, 0.115, 0.024), (0.0, -0.225, 0.026))
-    # Trigger guard
-    add_box_to_bm(bm, (0.018, 0.062, 0.006), (0.0, 0.008, -0.058))
-    add_box_to_bm(bm, (0.018, 0.007, 0.032), (0.0, 0.038, -0.042))
-    add_box_to_bm(bm, (0.018, 0.007, 0.032), (0.0, -0.022, -0.042))
-    body_parts.append(finalize_mesh("AWP_RubberAndGuard", bm, mat_rubber, bevel_width=0.0025))
+    for by, bz in [(-0.275, -0.026), (-0.195, -0.026), (0.048, -0.004), (0.165, -0.002), (0.310, 0.000)]:
+        add_cyl_to_bm(bm, 0.0040, 0.0040, 0.0445, (0.0, by, bz), axis='X', segments=10)
+    body_parts.append(finalize_mesh("AWP_ChassisBolts", bm, mat_steel_matte, smooth=True))
 
-    # 3. Heavy Receiver, Picatinny Rail, Fluted Free-Float Barrel & Tactical Muzzle Brake
+    # 2. Ribbed Rubber Buttpad, Elevated Sculpted Cheek Rest & Trigger Guard
     bm = bmesh.new()
-    # Flat-sided AWP steel receiver action
-    add_box_to_bm(bm, (0.040, 0.24, 0.042), (0.0, 0.075, 0.032))
-    # Top Picatinny rail slots
-    add_box_to_bm(bm, (0.022, 0.21, 0.010), (0.0, 0.078, 0.056))
-    for i in range(10):
-        add_box_to_bm(bm, (0.023, 0.008, 0.004), (0.0, -0.015 + i * 0.020, 0.062))
-    # Heavy precision barrel lathe (Y: 0.19 to 0.78)
+    # Spacer + contoured oval rubber buttpad
+    add_lofted_sections_y(bm, [
+        (-0.348, make_oval_ring(0.021, 0.056, -0.026, segs=18)),
+        (-0.322, make_oval_ring(0.021, 0.056, -0.026, segs=18)),
+    ])
+    # Sculpted saddle cheek piece on twin vertical pillars
+    add_lofted_sections_y(bm, [
+        (-0.285, make_arch_ring(0.042, 0.020, 0.030, 0.012, bevel=0.004)),
+        (-0.172, make_arch_ring(0.042, 0.020, 0.030, 0.012, bevel=0.004)),
+    ])
+    for py in (-0.255, -0.200):
+        add_cyl_to_bm(bm, 0.005, 0.005, 0.018, (0.0, py, 0.018), axis='Z', segments=10)
+    # Arched trigger guard
+    add_rounded_profile_x(bm, [
+        (-0.024, -0.022), (-0.018, -0.022), (-0.016, -0.052),
+        (0.034, -0.052), (0.038, -0.022), (0.044, -0.022),
+        (0.038, -0.058), (-0.020, -0.058)
+    ], width_x=0.017, chamfer_x=0.0025, chamfer_in=0.001)
+    body_parts.append(finalize_mesh("AWP_RubberAndGuard", bm, mat_rubber, bevel_width=0.0012, split_angle_deg=42.0))
+
+    # 3. Chamfered Receiver Action, MIL-STD Picatinny Rail, Fluted Heavy Barrel & Machined Muzzle Brake
+    bm = bmesh.new()
+    add_lofted_sections_y(bm, [
+        (-0.046, make_arch_ring(0.040, 0.012, 0.048, 0.008, bevel=0.0045)),
+        (0.190,  make_arch_ring(0.040, 0.012, 0.048, 0.008, bevel=0.0045)),
+        (0.202,  make_arch_ring(0.034, 0.016, 0.044, 0.006, bevel=0.0040)),
+    ])
+    add_picatinny_rail_y(bm, -0.024, 0.184, 0.055, width=0.021, height=0.009)
+    # Genuine 8-flute precision free-float barrel!
+    add_fluted_barrel_y(bm, 0.195, 0.775, 0.0142, offset_xz=(0.0, 0.034), flutes=8, flute_depth=0.0014, slices=14)
+    # Barrel collar & multi-chamber machined tactical muzzle brake
     add_lathe_y(bm, [
-        (0.18, 0.0165), (0.28, 0.0148), (0.76, 0.0125), (0.78, 0.0125)
+        (0.768, 0.0155), (0.782, 0.0165), (0.848, 0.0165), (0.854, 0.0140), (0.856, 0.0095)
     ], offset=(0.0, 0.0, 0.034), segments=24)
-    # Multi-port rectangular/cylindrical muzzle brake (Y: 0.78 to 0.85)
-    add_box_to_bm(bm, (0.032, 0.068, 0.028), (0.0, 0.812, 0.034))
-    for i in range(3):
-        add_box_to_bm(bm, (0.035, 0.007, 0.016), (0.0, 0.792 + i * 0.020, 0.034))
-    body_parts.append(finalize_mesh("AWP_ActionAndBarrel", bm, mat_steel_matte, bevel_width=0.0015))
+    for bi in range(3):
+        add_box_to_bm(bm, (0.035, 0.008, 0.024), (0.0, 0.794 + bi * 0.020, 0.034))
+    body_parts.append(finalize_mesh("AWP_ActionAndBarrel", bm, mat_steel_matte, bevel_width=0.0010, split_angle_deg=36.0))
 
     mesh_body = join_objects(body_parts, "AWP_Body")
 
-    # 4. RIGGED PART: Variable Scope + Dual Rings + Lenses (bone: scope)
+    # 4. RIGGED PART: High-Detail Variable Sniper Scope + Dual Rings + Knurled Turrets (bone: scope)
     scope_parts = []
     bm = bmesh.new()
-    # Scope tube lathe (ocular bell -> main tube -> objective bell)
     add_lathe_y(bm, [
-        (-0.085, 0.022), (-0.015, 0.022), (0.005, 0.0155),
-        (0.165, 0.0155), (0.215, 0.029), (0.295, 0.029)
-    ], offset=(0.0, 0.0, 0.096), segments=24)
-    # Elevation & Windage Turrets
-    add_cyl_to_bm(bm, 0.011, 0.011, 0.024, (0.0, 0.082, 0.118), axis='Z', segments=16)
-    add_cyl_to_bm(bm, 0.010, 0.010, 0.024, (0.022, 0.082, 0.096), axis='X', segments=16)
-    add_cyl_to_bm(bm, 0.009, 0.009, 0.020, (-0.020, 0.082, 0.096), axis='X', segments=16)
-    # Dual Scope Mount Rings
-    for ry in (0.030, 0.138):
-        add_box_to_bm(bm, (0.032, 0.022, 0.044), (0.0, ry, 0.078))
-    scope_parts.append(finalize_mesh("AWP_ScopeBody", bm, mat_steel_matte, bevel_width=0.0012))
+        (-0.092, 0.0215), (-0.088, 0.0235), (-0.022, 0.0235), (-0.012, 0.0255), # Ocular + zoom ring
+        (0.004,  0.0255), (0.012,  0.0165), (0.168,  0.0165),                   # Main 34mm tube
+        (0.215,  0.0295), (0.296,  0.0305), (0.304,  0.0290), (0.304,  0.0250)  # Objective bell + lip
+    ], offset=(0.0, 0.0, 0.098), segments=32)
+    # Saddle housing + knurled tactical turrets (Elevation, Windage, Parallax)
+    add_box_to_bm(bm, (0.038, 0.036, 0.038), (0.0, 0.084, 0.098))
+    add_cyl_to_bm(bm, 0.0125, 0.0115, 0.022, (0.0, 0.084, 0.124), axis='Z', segments=20)
+    add_cyl_to_bm(bm, 0.0110, 0.0102, 0.022, (0.024, 0.084, 0.098), axis='X', segments=20)
+    add_cyl_to_bm(bm, 0.0100, 0.0095, 0.018, (-0.022, 0.084, 0.098), axis='X', segments=20)
+    # Dual sculpted scope mount rings with rail clamp cross-bolts
+    for ry in (0.028, 0.140):
+        add_cyl_to_bm(bm, 0.0215, 0.0215, 0.022, (0.0, ry, 0.098), axis='Y', segments=24)
+        add_box_to_bm(bm, (0.028, 0.022, 0.034), (0.0, ry, 0.074))
+        add_cyl_to_bm(bm, 0.0045, 0.0045, 0.036, (0.0, ry, 0.066), axis='X', segments=10)
+    scope_parts.append(finalize_mesh("AWP_ScopeBody", bm, mat_steel_matte, bevel_width=0.0010, split_angle_deg=38.0))
 
     bm_l = bmesh.new()
-    add_cyl_to_bm(bm_l, 0.025, 0.025, 0.004, (0.0, 0.294, 0.096), axis='Y', segments=20)
-    add_cyl_to_bm(bm_l, 0.019, 0.019, 0.004, (0.0, -0.084, 0.096), axis='Y', segments=20)
-    scope_parts.append(finalize_mesh("AWP_ScopeLenses", bm_l, mat_scope_lens))
+    add_cyl_to_bm(bm_l, 0.0255, 0.0255, 0.004, (0.0, 0.300, 0.098), axis='Y', segments=24)
+    add_cyl_to_bm(bm_l, 0.0195, 0.0195, 0.004, (0.0, -0.090, 0.098), axis='Y', segments=24)
+    scope_parts.append(finalize_mesh("AWP_ScopeLenses", bm_l, mat_scope_lens, smooth=True))
     mesh_scope = join_objects(scope_parts, "AWP_Scope")
 
-    # 5. RIGGED PART: Steel Bolt Body (bone: bolt)
+    # 5. RIGGED PART: Fluted Steel Bolt Body & Rear Shroud (bone: bolt)
     bm = bmesh.new()
-    add_cyl_to_bm(bm, 0.011, 0.011, 0.145, (0.0, 0.042, 0.034), axis='Y', segments=16)
-    # Rear bolt shroud
-    add_box_to_bm(bm, (0.024, 0.026, 0.026), (0.0, -0.032, 0.034))
-    mesh_bolt = finalize_mesh("AWP_Bolt", bm, mat_bolt_steel, bevel_width=0.0012)
+    add_cyl_to_bm(bm, 0.0112, 0.0112, 0.148, (0.0, 0.042, 0.034), axis='Y', segments=20)
+    add_lofted_sections_y(bm, [
+        (-0.046, make_arch_ring(0.024, 0.022, 0.042, 0.007, bevel=0.003)),
+        (-0.020, make_arch_ring(0.024, 0.022, 0.042, 0.007, bevel=0.003)),
+    ])
+    mesh_bolt = finalize_mesh("AWP_Bolt", bm, mat_bolt_steel, bevel_width=0.0010, split_angle_deg=38.0)
 
-    # 6. RIGGED PART: Bolt Handle + Spherical Knob (bone: bolt_handle, child of bolt!)
+    # 6. RIGGED PART: Swept Bolt Handle & Spherical Tactical Knob (bone: bolt_handle)
     bm = bmesh.new()
-    add_box_to_bm(bm, (0.036, 0.010, 0.010), (0.024, -0.012, 0.028), rot_deg=(0.0, 22.0, -10.0))
-    bmesh.ops.create_uvsphere(
-        bm, u_segments=14, v_segments=10, radius=0.011,
-        matrix=bpy.context.scene.cursor.matrix.Translation(Vector((0.045, -0.018, 0.018)))
-    )
-    mesh_bolt_handle = finalize_mesh("AWP_BoltHandle", bm, mat_bolt_steel, bevel_width=0.001)
+    add_cyl_to_bm(bm, 0.0052, 0.0046, 0.040, (0.025, -0.013, 0.028), axis='X', segments=14, rot_deg=(0.0, 22.0, -10.0))
+    bmesh.ops.create_uvsphere(bm, u_segments=18, v_segments=12, radius=0.0115, matrix=Matrix.Translation(Vector((0.047, -0.019, 0.018))))
+    mesh_bolt_handle = finalize_mesh("AWP_BoltHandle", bm, mat_bolt_steel, smooth=True)
 
-    # 7. RIGGED PART: Detachable 10-Round Box Magazine (bone: magazine)
+    # 7. RIGGED PART: Detachable 10-Round Box Magazine with Baseplate (bone: magazine)
     bm = bmesh.new()
-    add_box_to_bm(bm, (0.028, 0.082, 0.096), (0.0, 0.105, -0.056))
-    add_box_to_bm(bm, (0.032, 0.088, 0.010), (0.0, 0.105, -0.104))
-    mesh_mag = finalize_mesh("AWP_Magazine", bm, mat_steel_matte, bevel_width=0.0018)
+    add_lofted_sections_y(bm, [
+        (0.064, make_arch_ring(0.028, -0.104, -0.012, 0.002, bevel=0.003)),
+        (0.146, make_arch_ring(0.028, -0.104, -0.012, 0.002, bevel=0.003)),
+    ])
+    add_box_to_bm(bm, (0.033, 0.090, 0.010), (0.0, 0.105, -0.105))
+    mesh_mag = finalize_mesh("AWP_Magazine", bm, mat_steel_matte, bevel_width=0.0014, split_angle_deg=36.0)
 
     # 8. RIGGED PART: Match Trigger (bone: trigger)
     bm = bmesh.new()
-    add_extruded_profile_x(bm, [
-        (0.010, -0.022), (0.016, -0.022),
-        (0.008, -0.049), (0.002, -0.047)
-    ], width_x=0.006)
-    mesh_trigger = finalize_mesh("AWP_Trigger", bm, mat_bolt_steel, bevel_width=0.0008)
+    add_rounded_profile_x(bm, [
+        (0.010, -0.022), (0.016, -0.022), (0.011, -0.036), (0.008, -0.050), (0.002, -0.048)
+    ], width_x=0.006, chamfer_x=0.0015, chamfer_in=0.001)
+    mesh_trigger = finalize_mesh("AWP_Trigger", bm, mat_bolt_steel, smooth=True)
 
-    # 9. RIGGED PART: Folding Bipod (bone: bipod)
+    # 9. RIGGED PART: Detailed Folding Tactical Bipod (bone: bipod)
     bm = bmesh.new()
-    add_box_to_bm(bm, (0.038, 0.036, 0.022), (0.0, 0.39, -0.032))
+    add_box_to_bm(bm, (0.036, 0.038, 0.022), (0.0, 0.395, -0.032))
     for side in (-1.0, 1.0):
-        add_cyl_to_bm(bm, 0.0065, 0.0055, 0.19, (side * 0.022, 0.48, -0.042), axis='Y', segments=12, rot_deg=(-4.0, 0.0, side * 4.0))
-        add_cyl_to_bm(bm, 0.009, 0.009, 0.016, (side * 0.028, 0.575, -0.048), axis='Y', segments=12)
-    mesh_bipod = finalize_mesh("AWP_Bipod", bm, mat_steel_matte, bevel_width=0.001)
+        add_cyl_to_bm(bm, 0.0068, 0.0056, 0.195, (side * 0.023, 0.485, -0.040), axis='Y', segments=14, rot_deg=(-4.0, 0.0, side * 4.0))
+        add_cyl_to_bm(bm, 0.0095, 0.0090, 0.018, (side * 0.029, 0.582, -0.046), axis='Y', segments=14)
+    mesh_bipod = finalize_mesh("AWP_Bipod", bm, mat_steel_matte, bevel_width=0.0010, split_angle_deg=38.0)
 
-    # Build Armature (bolt_handle is child of bolt for authentic lift + pull!)
     arm = build_armature("AWP_Rig", [
         ("weapon_root", None, (0.0, 0.0, 0.0), (0.0, 0.08, 0.0)),
         ("weapon_body", "weapon_root", (0.0, 0.0, 0.0), (0.0, 0.16, 0.0)),
         ("bolt", "weapon_body", (0.0, -0.012, 0.034), (0.0, 0.10, 0.034)),
-        ("bolt_handle", "bolt", (0.0, -0.012, 0.034), (0.045, -0.018, 0.018)),
+        ("bolt_handle", "bolt", (0.0, -0.012, 0.034), (0.047, -0.019, 0.018)),
         ("magazine", "weapon_body", (0.0, 0.105, -0.015), (0.0, 0.105, -0.105)),
         ("trigger", "weapon_body", (0.0, 0.012, -0.022), (0.0, 0.006, -0.048)),
-        ("scope", "weapon_body", (0.0, 0.08, 0.096), (0.0, 0.20, 0.096)),
-        ("bipod", "weapon_body", (0.0, 0.39, -0.032), (0.0, 0.56, -0.045)),
+        ("scope", "weapon_body", (0.0, 0.08, 0.098), (0.0, 0.20, 0.098)),
+        ("bipod", "weapon_body", (0.0, 0.395, -0.032), (0.0, 0.56, -0.045)),
     ])
 
     bind_mesh_rigid_to_bone(mesh_body, arm, "weapon_body")
@@ -184,128 +225,25 @@ def build_awp():
     bind_mesh_rigid_to_bone(mesh_trigger, arm, "trigger")
     bind_mesh_rigid_to_bone(mesh_bipod, arm, "bipod")
 
-    # Markers for Godot
-    add_marker_empty("MuzzlePoint", (0.0, 0.85, 0.034), arm)
-    add_marker_empty("EjectPoint", (0.028, 0.075, 0.040), arm)
-    add_marker_empty("OpticMount", (0.0, 0.082, 0.130), arm)
-    add_marker_empty("MuzzleMount", (0.0, 0.85, 0.034), arm)
-    add_marker_empty("MagMount", (0.0, 0.105, -0.115), arm)
-    add_marker_empty("LaserMount", (0.026, 0.36, 0.005), arm)
-
-    # Animations (30 fps)
-    # 1. idle
-    create_action_from_keyframes(arm, "idle", {
-        "weapon_body": [
-            (1, (0, 0, 0), (0, 0, 0)),
-            (30, (0, 0, 0.0015), (0.2, 0, 0.1)),
-            (60, (0, 0, 0), (0, 0, 0)),
-        ],
-    }, 60)
-
-    # 2. fire (sharp sniper kick + authentic 4-stage bolt-action cycling: lift -> pull -> push -> lock!)
-    create_action_from_keyframes(arm, "fire", {
-        "weapon_body": [
-            (1, (0, 0, 0), (0, 0, 0)),
-            (3, (0, -0.042, 0.010), (5.5, 0, 0)),
-            (8, (0, -0.008, 0.002), (1.0, 0, 0)),
-            (14, (-0.006, 0.0, -0.004), (1.2, -3.5, 5.0)),
-            (20, (0, 0, 0), (0, 0, 0)),
-        ],
-        "trigger": [(1, None, (0, 0, 0)), (2, None, (22, 0, 0)), (6, None, (0, 0, 0))],
-        "bolt_handle": [
-            (1, None, (0, 0, 0)),
-            (7, None, (0, 0, 0)),
-            (10, None, (0, -68, 0)),   # Lift bolt handle 68 deg up
-            (16, None, (0, -68, 0)),   # Keep lifted while cycling
-            (19, None, (0, 0, 0)),     # Lock handle back down
-        ],
-        "bolt": [
-            (1, (0, 0, 0), None),
-            (10, (0, 0, 0), None),
-            (13, (0, -0.092, 0), None),  # Pull bolt straight back
-            (16, (0, 0, 0), None),       # Push bolt straight forward
-        ],
-    }, 21)
-
-    # 3. bolt_cycle (standalone 4-stage bolt action)
-    create_action_from_keyframes(arm, "bolt_cycle", {
-        "bolt_handle": [
-            (1, None, (0, 0, 0)),
-            (4, None, (0, -68, 0)),
-            (11, None, (0, -68, 0)),
-            (14, None, (0, 0, 0)),
-        ],
-        "bolt": [
-            (1, (0, 0, 0), None),
-            (4, (0, 0, 0), None),
-            (8, (0, -0.092, 0), None),
-            (11, (0, 0, 0), None),
-        ],
-    }, 15)
-
-    # 4. reload (full sniper reload: ~2.0s = 60 frames: mag out -> mag in -> bolt cycle!)
-    create_action_from_keyframes(arm, "reload", {
-        "weapon_body": [
-            (1, (0, 0, 0), (0, 0, 0)),
-            (8, (-0.015, 0.01, -0.02), (6, -10, 14)),
-            (40, (-0.015, 0.01, -0.02), (6, -10, 14)),
-            (54, (-0.005, 0.0, -0.005), (2, -4, 6)),
-            (60, (0, 0, 0), (0, 0, 0)),
-        ],
-        "magazine": [
-            (1, (0, 0, 0), (0, 0, 0)),
-            (10, (0, 0, 0), (0, 0, 0)),
-            (18, (0, 0.0, -0.22), (0, 0, 0)),
-            (26, (0, 0.0, -0.22), (0, 0, 0)),
-            (36, (0, 0, 0), (0, 0, 0)),
-        ],
-        "bolt_handle": [
-            (1, None, (0, 0, 0)),
-            (41, None, (0, 0, 0)),
-            (45, None, (0, -68, 0)),
-            (53, None, (0, -68, 0)),
-            (57, None, (0, 0, 0)),
-        ],
-        "bolt": [
-            (1, (0, 0, 0), None),
-            (45, (0, 0, 0), None),
-            (49, (0, -0.092, 0), None),
-            (53, (0, 0, 0), None),
-        ],
-    }, 60)
-
-    # 5. reload_mag_out & 6. reload_mag_in
-    create_action_from_keyframes(arm, "reload_mag_out", {
-        "magazine": [(1, (0, 0, 0), None), (12, (0, 0, -0.22), None)],
-    }, 12)
-
-    create_action_from_keyframes(arm, "reload_mag_in", {
-        "magazine": [(1, (0, 0, -0.22), None), (12, (0, 0, 0), None)],
-    }, 12)
-
-    # 7. equip & 8. unequip
-    create_action_from_keyframes(arm, "equip", {
-        "weapon_body": [
-            (1, (0, -0.07, -0.22), (-36, 10, -10)),
-            (9, (0, 0.006, 0.008), (2, 0, 0)),
-            (13, (0, 0, 0), (0, 0, 0)),
-        ],
-    }, 13)
-
-    create_action_from_keyframes(arm, "unequip", {
-        "weapon_body": [
-            (1, (0, 0, 0), (0, 0, 0)),
-            (9, (0, -0.07, -0.22), (-36, 10, -10)),
-        ],
-    }, 9)
-
-    # Render studio presentation images
-    render_studio_views(
-        "awp",
-        RENDER_DIR,
+    # Bone-Skinned Modular Attachments (Piggyback Holo on Scope, Muzzle Comp, Mag Extension on magazine bone, Side Laser)
+    build_modular_attachments_for_weapon(
         arm,
-        center_y=0.22,
-        hero_dist=1.22,
+        optic_pos=(0.0, 0.140, 0.120),
+        muzzle_pos=(0.0, 0.858, 0.034),
+        mag_ext_pos=(0.0, 0.105, -0.128),
+        laser_pos=(0.028, 0.355, 0.004),
+        mag_bone_name="magazine",
+    )
+
+    add_bone_marker_empty("MuzzlePoint", (0.0, 0.860, 0.034), arm, "weapon_body")
+    add_bone_marker_empty("EjectPoint", (0.028, 0.075, 0.040), arm, "weapon_body")
+    add_bone_marker_empty("OpticMount", (0.0, 0.140, 0.120), arm, "weapon_body")
+    add_bone_marker_empty("MuzzleMount", (0.0, 0.858, 0.034), arm, "weapon_body")
+    add_bone_marker_empty("MagMount", (0.0, 0.105, -0.112), arm, "magazine")
+    add_bone_marker_empty("LaserMount", (0.028, 0.355, 0.004), arm, "weapon_body")
+
+    render_studio_views(
+        "awp", RENDER_DIR, arm, center_y=0.22, hero_dist=1.34,
         explode_offsets={
             "scope": (0.0, 0.0, 0.11),
             "bolt": (0.0, -0.14, 0.04),
@@ -314,10 +252,8 @@ def build_awp():
             "trigger": (0.0, 0.0, -0.05),
         },
     )
-
-    save_blend(os.path.join(OUT_DIR, "awp.blend"))
-    export_glb(os.path.join(OUT_DIR, "awp.glb"))
-    print("[AWP] Successfully built, rigged, animated, rendered, and exported.")
+    save_blend(os.path.join(OUT_DIR, "source", "awp.blend"))
+    print("[AWP Overhaul] Hard-surface model, bone mounts, attachments & renders complete.")
 
 
 if __name__ == "__main__":

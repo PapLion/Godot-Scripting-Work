@@ -129,18 +129,57 @@ def _get_side_rest_layout(side: str):
 
 def create_fp_arms_materials():
     return {
-        "glove_olive": create_pbr_material("FP_GloveOlive", (0.20, 0.25, 0.17), metallic=0.02, roughness=0.76, pattern='polymer', seed=301),
-        "glove_leather": create_pbr_material("FP_GloveLeather", (0.10, 0.105, 0.115), metallic=0.05, roughness=0.58, pattern='polymer', seed=312),
-        "knuckle_armor": create_pbr_material("FP_KnuckleArmor", (0.065, 0.070, 0.080), metallic=0.18, roughness=0.38, pattern='metal', seed=323),
-        "skin": create_pbr_material("FP_ForearmSkin", (0.56, 0.40, 0.31), metallic=0.0, roughness=0.58, pattern='polymer', seed=334),
-        "sleeve": create_pbr_material("FP_TacticalSleeve", (0.14, 0.17, 0.14), metallic=0.02, roughness=0.84, pattern='polymer', seed=345),
+        "glove_olive": create_pbr_material("FP_GloveOlive", (0.145, 0.185, 0.125), metallic=0.02, roughness=0.78, pattern='fabric', seed=301, normal_strength=0.14),
+        "glove_leather": create_pbr_material("FP_GloveLeather", (0.075, 0.080, 0.088), metallic=0.04, roughness=0.58, pattern='polymer', seed=312, normal_strength=0.12),
+        "knuckle_armor": create_pbr_material("FP_KnuckleArmor", (0.055, 0.060, 0.068), metallic=0.22, roughness=0.34, pattern='metal', seed=323, normal_strength=0.10),
+        "skin": create_pbr_material("FP_ForearmSkin", (0.56, 0.40, 0.30), metallic=0.0, roughness=0.60, pattern='skin', seed=334, normal_strength=0.08),
+        "sleeve": create_pbr_material("FP_TacticalSleeve", (0.088, 0.108, 0.092), metallic=0.02, roughness=0.86, pattern='fabric', seed=345, normal_strength=0.16),
     }
 
 
+def _make_muscular_forearm(bm: bmesh.types.BMesh, p0: Vector, p1: Vector, segs: int = 20):
+    """Builds an anatomically tapered forearm with subtle brachioradialis muscle swell
+    near upper third and slender oval wrist tapering smoothly into the glove cuff.
+    """
+    axis = (p1 - p0)
+    y_dir = axis.normalized()
+    ref_up = Vector((0.0, 0.0, 1.0)) if abs(y_dir.dot(Vector((0.0, 0.0, 1.0)))) < 0.95 else Vector((1.0, 0.0, 0.0))
+    x_dir = y_dir.cross(ref_up).normalized()
+    z_dir = x_dir.cross(y_dir).normalized()
+
+    # (t, rx, rz) anatomical forearm cross-sections
+    profile = [
+        (0.00, 0.044, 0.041),
+        (0.18, 0.0465, 0.0425),
+        (0.38, 0.0435, 0.0390),
+        (0.58, 0.0380, 0.0335),
+        (0.78, 0.0330, 0.0275),
+        (0.92, 0.0305, 0.0248),
+        (1.00, 0.0295, 0.0238),
+    ]
+    ring_verts = []
+    for t, rx, rz in profile:
+        center = p0.lerp(p1, t)
+        ring = []
+        for s in range(segs):
+            ang = (s / float(segs)) * math.tau
+            v_pos = center + x_dir * (math.cos(ang) * rx) + z_dir * (math.sin(ang) * rz)
+            ring.append(bm.verts.new(v_pos))
+        ring_verts.append(ring)
+
+    for r in range(len(ring_verts) - 1):
+        r0, r1 = ring_verts[r], ring_verts[r + 1]
+        for s in range(segs):
+            ns = (s + 1) % segs
+            bm.faces.new((r0[s], r0[ns], r1[ns], r1[s]))
+    bm.faces.new(list(reversed(ring_verts[0])))
+    bm.faces.new(ring_verts[-1])
+
+
 def _build_arm_mesh_for_side(side: str, mats: dict) -> list:
-    """Builds detailed anatomical arm, bare forearm, rolled tactical sleeve,
-    padded combat glove, knuckle armor plates, leather palm, and 5 articulated fingers.
-    Returns list of (mesh_obj, primary_bone_hint) prior to unified joining & smooth skinning.
+    """Builds detailed anatomical arm, muscular bare forearm, multi-fold rolled tactical sleeve,
+    padded combat glove with wrist closure tab, sculpted carbon knuckle armor domes, leather palm,
+    and 5 articulated fingers.
     """
     lay = _get_side_rest_layout(side)
     sh = lay["shoulder"]
@@ -150,75 +189,78 @@ def _build_arm_mesh_for_side(side: str, mats: dict) -> list:
 
     parts = []
 
-    # 1. Tactical Rolled Combat Sleeve (Upper arm -> upper forearm)
+    # 1. Tactical Rolled Combat Sleeve (Upper arm -> upper forearm with 2 stepped fabric cuff folds)
     bm = bmesh.new()
-    _make_tapered_limb_segment(bm, sh, el, 0.058, 0.056, 0.049, 0.047, rings=5, segs=18)
-    sleeve_mid = el.lerp(wr, 0.26)
-    _make_tapered_limb_segment(bm, el, sleeve_mid, 0.051, 0.049, 0.048, 0.045, rings=3, segs=18)
-    # Rolled cuff collar
-    cuff_a = el.lerp(wr, 0.22)
-    cuff_b = el.lerp(wr, 0.30)
-    _make_tapered_limb_segment(bm, cuff_a, cuff_b, 0.052, 0.049, 0.050, 0.047, rings=2, segs=18)
-    parts.append(finalize_mesh(f"ArmSleeve_{side}", bm, mats["sleeve"], smooth=True))
+    _make_tapered_limb_segment(bm, sh, el, 0.059, 0.056, 0.050, 0.047, rings=6, segs=20)
+    sleeve_mid = el.lerp(wr, 0.25)
+    _make_tapered_limb_segment(bm, el, sleeve_mid, 0.052, 0.049, 0.049, 0.046, rings=3, segs=20)
+    # Two-tier rolled tactical shirt cuff fold
+    _make_tapered_limb_segment(bm, el.lerp(wr, 0.19), el.lerp(wr, 0.25), 0.0535, 0.0505, 0.0530, 0.0500, rings=2, segs=20)
+    _make_tapered_limb_segment(bm, el.lerp(wr, 0.24), el.lerp(wr, 0.30), 0.0525, 0.0495, 0.0505, 0.0475, rings=2, segs=20)
+    parts.append(finalize_mesh(f"ArmSleeve_{side}", bm, mats["sleeve"], smooth=True, split_angle_deg=65.0))
 
-    # 2. Bare Muscular Forearm (extends cleanly into glove wrist cuff with zero gap)
+    # 2. Bare Anatomical Muscular Forearm (extends cleanly into glove wrist cuff with zero gap)
     bm = bmesh.new()
-    forearm_start = el.lerp(wr, 0.25)
+    forearm_start = el.lerp(wr, 0.24)
     forearm_end = el.lerp(wr, 0.99)
-    _make_tapered_limb_segment(bm, forearm_start, forearm_end, 0.044, 0.041, 0.030, 0.024, rings=7, segs=18)
-    parts.append(finalize_mesh(f"ArmForearm_{side}", bm, mats["skin"], smooth=True))
+    _make_muscular_forearm(bm, forearm_start, forearm_end, segs=20)
+    parts.append(finalize_mesh(f"ArmForearm_{side}", bm, mats["skin"], smooth=True, split_angle_deg=70.0))
 
-    # 3. Tactical Glove Wrist Cuff (strictly coaxial with forearm) + seamless wrist joint collar
+    # 3. Tactical Glove Wrist Cuff (strictly coaxial with forearm) + Velcro closure strap
     bm = bmesh.new()
-    strap_start = el.lerp(wr, 0.82)
+    strap_start = el.lerp(wr, 0.80)
     strap_end = el.lerp(wr, 1.02)
-    _make_tapered_limb_segment(bm, strap_start, strap_end, 0.034, 0.029, 0.033, 0.027, rings=3, segs=18)
-    parts.append(finalize_mesh(f"GloveCuff_{side}", bm, mats["glove_leather"], smooth=True))
+    _make_tapered_limb_segment(bm, strap_start, strap_end, 0.0345, 0.0295, 0.0335, 0.0272, rings=4, segs=20)
+    # Raised Velcro cinch band near cuff edge
+    _make_tapered_limb_segment(bm, el.lerp(wr, 0.84), el.lerp(wr, 0.93), 0.0365, 0.0315, 0.0360, 0.0310, rings=2, segs=20)
+    parts.append(finalize_mesh(f"GloveCuff_{side}", bm, mats["glove_leather"], smooth=True, split_angle_deg=55.0))
 
     # Seamless leather wrist bridge dome owned by hand bone so wrist bends cleanly inside cuff
     bm = bmesh.new()
     bmesh.ops.create_uvsphere(
-        bm, u_segments=14, v_segments=10, radius=0.030,
-        matrix=Matrix.Translation(wr) @ Matrix.Diagonal((1.05, 1.0, 0.72, 1.0))
+        bm, u_segments=16, v_segments=10, radius=0.0265,
+        matrix=Matrix.Translation(wr) @ Matrix.Diagonal((1.05, 0.96, 0.68, 1.0))
     )
     parts.append(finalize_mesh(f"GlovePalmWrist_{side}", bm, mats["glove_leather"], smooth=True))
 
-    # 4. Glove Main Hand / Dorsum (Olive-drab padded fabric)
+    # 4. Glove Main Hand / Dorsum (Olive-drab padded ripstop fabric)
     bm = bmesh.new()
     p_a = wr + Vector((0.0, 0.008, 0.0))
-    p_b = wr + Vector((0.0, 0.088, 0.001))
-    _make_tapered_limb_segment(bm, p_a, p_b, 0.035, 0.017, 0.041, 0.015, rings=5, segs=18)
-    parts.append(finalize_mesh(f"GlovePalmOlive_{side}", bm, mats["glove_olive"], smooth=True))
+    p_b = wr + Vector((0.0, 0.089, 0.001))
+    _make_tapered_limb_segment(bm, p_a, p_b, 0.034, 0.0165, 0.040, 0.0150, rings=6, segs=20)
+    parts.append(finalize_mesh(f"GlovePalmOlive_{side}", bm, mats["glove_olive"], smooth=True, split_angle_deg=65.0))
 
-    # 5. Reinforced Leather Palm Pad & Thumb Saddle
+    # 5. Reinforced Leather Palm Pad & Sculpted Thenar Thumb Muscle Saddle
     bm = bmesh.new()
-    add_box_to_bm(bm, (0.072, 0.068, 0.010), tuple(wr + Vector((0.0, 0.050, -0.012))))
-    add_box_to_bm(bm, (0.024, 0.042, 0.012), tuple(wr + Vector((-sx * 0.032, 0.036, -0.008))))
-    parts.append(finalize_mesh(f"GlovePalmPad_{side}", bm, mats["glove_leather"], bevel_width=0.003))
+    add_box_to_bm(bm, (0.068, 0.064, 0.009), tuple(wr + Vector((0.0, 0.050, -0.011))))
+    # Smooth low-profile thumb-base saddle
+    bmesh.ops.create_uvsphere(
+        bm, u_segments=14, v_segments=10, radius=0.016,
+        matrix=Matrix.Translation(wr + Vector((-sx * 0.027, 0.034, -0.008))) @ Matrix.Diagonal((0.85, 1.25, 0.70, 1.0))
+    )
+    parts.append(finalize_mesh(f"GlovePalmPad_{side}", bm, mats["glove_leather"], bevel_width=0.003, split_angle_deg=55.0))
 
-    # 6. Molded Carbon Knuckle Armor Guard (distinctive tactical glove detail!)
+    # 6. Sleek Low-Profile Molded Carbon Knuckle Guard (flush with glove dorsum, no bulging spheres!)
     bm = bmesh.new()
-    add_box_to_bm(bm, (0.074, 0.020, 0.012), tuple(wr + Vector((0.0, 0.082, 0.014))))
-    for k_x in (-0.026, -0.008, 0.011, 0.027):
-        add_cyl_to_bm(bm, 0.0085, 0.0085, 0.014, tuple(wr + Vector((k_x, 0.085, 0.015))), axis='Y', segments=12)
-    parts.append(finalize_mesh(f"GloveKnuckles_{side}", bm, mats["knuckle_armor"], bevel_width=0.002))
+    _make_tapered_limb_segment(
+        bm,
+        wr + Vector((-0.031, 0.083, 0.012)),
+        wr + Vector((0.031, 0.080, 0.012)),
+        0.0072, 0.0046, 0.0068, 0.0044, rings=4, segs=14
+    )
+    parts.append(finalize_mesh(f"GloveKnuckles_{side}", bm, mats["knuckle_armor"], smooth=True, split_angle_deg=55.0))
 
-    # 7. Articulated 5 Fingers (olive dorsal / leather grip segments + rounded fingertips)
+    # 7. Articulated 5 Fingers (sleek tapered phalanges + rounded anatomical fingertips, zero protruding beads!)
     bm_olive_f = bmesh.new()
     bm_dark_f = bmesh.new()
     for fname, (p0, p1, p2, p3, rad) in lay["fingers"].items():
-        # Proximal phalanx (olive glove fabric)
-        _make_tapered_limb_segment(bm_olive_f, p0, p1, rad * 1.05, rad * 0.96, rad * 0.96, rad * 0.88, rings=3, segs=12)
-        # Middle phalanx (leather padded grip)
-        _make_tapered_limb_segment(bm_dark_f, p1, p2, rad * 0.94, rad * 0.86, rad * 0.85, rad * 0.78, rings=3, segs=12)
-        # Distal phalanx + rounded anatomical fingertip dome
-        _make_tapered_limb_segment(bm_dark_f, p2, p3, rad * 0.84, rad * 0.76, rad * 0.68, rad * 0.62, rings=3, segs=12)
+        _make_tapered_limb_segment(bm_olive_f, p0, p1, rad * 1.04, rad * 0.94, rad * 0.94, rad * 0.86, rings=3, segs=14)
+        _make_tapered_limb_segment(bm_dark_f, p1, p2, rad * 0.93, rad * 0.85, rad * 0.84, rad * 0.77, rings=3, segs=14)
+        _make_tapered_limb_segment(bm_dark_f, p2, p3, rad * 0.83, rad * 0.75, rad * 0.68, rad * 0.62, rings=3, segs=14)
         bmesh.ops.create_uvsphere(
-            bm_dark_f, u_segments=10, v_segments=6, radius=rad * 0.66,
+            bm_dark_f, u_segments=12, v_segments=8, radius=rad * 0.66,
             matrix=Matrix.Translation(p3)
         )
-        # Sleek low-profile dorsal knuckle pad
-        add_box_to_bm(bm_dark_f, (rad * 1.25, 0.009, 0.0032), tuple(p1 + Vector((0.0, 0.0, rad * 0.78))))
 
     parts.append(finalize_mesh(f"GloveFingersProx_{side}", bm_olive_f, mats["glove_olive"], smooth=True))
     parts.append(finalize_mesh(f"GloveFingersDist_{side}", bm_dark_f, mats["glove_leather"], smooth=True))
@@ -388,6 +430,8 @@ def solve_and_pose_arm_ik(
     elbow_pole_world: Vector,
     finger_curl: dict,
     frame: int,
+    hand_rot_matrix: Matrix = None,
+    prev_quats: dict = None,
 ):
     """Analytically computes clean 2-bone arm IK + wrist orientation + articulated finger curls
     and inserts deform-bone keyframes directly (100% glTF-ready with zero constraint lag!).
@@ -450,7 +494,10 @@ def solve_and_pose_arm_ik(
             up_arm = -up_arm
 
     # Desired world orientation of hand
-    hand_rot = Euler(tuple(math.radians(a) for a in hand_rot_euler_deg), 'XYZ').to_matrix().to_4x4()
+    if hand_rot_matrix is not None:
+        hand_rot = hand_rot_matrix.to_3x3().to_4x4()
+    else:
+        hand_rot = Euler(tuple(math.radians(a) for a in hand_rot_euler_deg), 'XYZ').to_matrix().to_4x4()
     m_hand = Matrix.Translation(clamped_wrist) @ hand_rot
 
     # Align forearm roll with hand dorsal axis (natural anatomical supination/pronation -> zero wrist twist!)
@@ -474,6 +521,14 @@ def solve_and_pose_arm_ik(
         pb.rotation_mode = 'QUATERNION'
         pb.matrix = mat
         bpy.context.view_layer.update()
+        # Prevent quaternion sign flips across animation frames!
+        if prev_quats is not None:
+            pq = prev_quats.get(pb.name)
+            if pq is not None:
+                q_cur = pb.rotation_quaternion.copy()
+                q_cur.make_compatible(pq)
+                pb.rotation_quaternion = q_cur
+            prev_quats[pb.name] = pb.rotation_quaternion.copy()
         pb.keyframe_insert(data_path='location', frame=frame)
         pb.keyframe_insert(data_path='rotation_quaternion', frame=frame)
 
@@ -515,11 +570,11 @@ FINGER_GRIP_TRIGGER_PULL = {
 }
 
 FINGER_GRIP_FOREND = {
-    "thumb":  (24, 26, 18),
-    "index":  (44, 52, 34),
-    "middle": (48, 56, 36),
-    "ring":   (50, 58, 38),
-    "pinky":  (46, 52, 34),
+    "thumb":  (38, 34, 24),
+    "index":  (48, 56, 38),
+    "middle": (52, 60, 40),
+    "ring":   (54, 62, 42),
+    "pinky":  (50, 56, 38),
 }
 
 FINGER_GRIP_MAG = {
@@ -596,12 +651,12 @@ def build_standalone_fp_arms():
     ]
 
     cam_d = bpy.data.cameras.new("ArmsCam")
-    cam_d.lens = 42.0
+    cam_d.lens = 36.0
     cam_o = bpy.data.objects.new("ArmsCam", cam_d)
     scene.collection.objects.link(cam_o)
     scene.camera = cam_o
-    cam_o.location = Vector((0.36, 0.42, 0.24))
-    cam_o.rotation_euler = (Vector((0.0, -0.04, -0.13)) - cam_o.location).to_track_quat('-Z', 'Y').to_euler()
+    cam_o.location = Vector((0.06, 0.72, 0.34))
+    cam_o.rotation_euler = (Vector((0.0, 0.04, -0.15)) - cam_o.location).to_track_quat('-Z', 'Y').to_euler()
     scene.render.filepath = os.path.join(RIG_RENDER_DIR, "fp_arms_reusable_rig.png")
     bpy.ops.render.render(write_still=True)
 

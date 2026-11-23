@@ -44,6 +44,8 @@ var _fire_cooldown: float = 0.0
 var _dry_fire_cooldown: float = 0.0
 var _barrel_heat: float = 0.0
 var _action_timer: float = 0.0
+var _bolt_total_duration: float = 0.0
+var _pending_bolt_shell_eject: bool = false
 var _pending_slot: int = -1
 var _shell_stage: ShellReloadStage = ShellReloadStage.NONE
 var _burst_remaining: int = 0
@@ -147,7 +149,7 @@ func request_reload() -> bool:
 		_shell_stage = ShellReloadStage.NONE
 		_action_timer = weapon.stats.empty_reload_duration if is_empty else weapon.stats.tactical_reload_duration
 		if _viewmodel != null:
-			_viewmodel.play_reload_magazine(_action_timer)
+			_viewmodel.play_reload_magazine(_action_timer, is_empty)
 
 	_play_weapon_sound(&"reload_mag_out")
 	reload_started.emit(is_empty, is_shell)
@@ -470,7 +472,8 @@ func _execute_shot(weapon: WeaponInstance, is_crouching: bool) -> void:
 			_barrel_heat = minf(1.0, _barrel_heat + 0.14)
 			_fx_manager.spawn_muzzle_smoke(m_pos, fwd, weapon.data.visual_preset, _barrel_heat)
 
-	if eject_shells_enabled and _viewmodel != null and is_inside_tree():
+	var will_bolt_cycle := (weapon.get_current_fire_mode() == WeaponData.FireMode.BOLT_ACTION and weapon.current_mag > 0)
+	if eject_shells_enabled and _viewmodel != null and is_inside_tree() and not will_bolt_cycle:
 		_spawn_ejected_shell(weapon.data)
 
 	shot_fired.emit(summary)
@@ -484,9 +487,11 @@ func _execute_shot(weapon: WeaponInstance, is_crouching: bool) -> void:
 			_play_feedback_sound(&"hit_body")
 		hit_confirmed.emit(summary.any_critical_hit, summary.any_kill, summary.total_damage)
 
-	# Bolt-action weapons (e.g. AWP) require completing a bolt cycle before the next shot is available
-	if weapon.get_current_fire_mode() == WeaponData.FireMode.BOLT_ACTION and weapon.current_mag > 0:
+	# Bolt-action weapons (e.g. AWP) require completing a bolt cycle; shell ejects mid-bolt-pull!
+	if will_bolt_cycle:
 		_action_timer = maxf(0.25, weapon.data.bolt_cycle_duration)
+		_bolt_total_duration = _action_timer
+		_pending_bolt_shell_eject = true
 		_fire_cooldown = maxf(_fire_cooldown, _action_timer)
 		state_machine.set_action_state(WeaponStateMachine.ActionState.CYCLING_BOLT)
 		if _viewmodel != null:
@@ -520,7 +525,14 @@ func _step_action_timers(delta: float, weapon: WeaponInstance) -> void:
 
 		WeaponStateMachine.ActionState.CYCLING_BOLT:
 			_action_timer -= delta
+			# Eject spent .338 brass casing right as the right hand pulls the bolt back (~50% into bolt_action)!
+			if _pending_bolt_shell_eject and _bolt_total_duration > 0.0 and _action_timer <= _bolt_total_duration * 0.52:
+				_pending_bolt_shell_eject = false
+				_play_weapon_sound(&"fire_mode")
+				if eject_shells_enabled and _viewmodel != null and is_inside_tree():
+					_spawn_ejected_shell(weapon.data)
 			if _action_timer <= 0.0:
+				_pending_bolt_shell_eject = false
 				_play_weapon_sound(&"equip")
 				state_machine.set_action_state(WeaponStateMachine.ActionState.IDLE)
 				if _viewmodel != null:

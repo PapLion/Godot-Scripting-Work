@@ -23,10 +23,13 @@ func _run_all() -> void:
 	await _test_rigged_weapon_models_and_animations()
 	await _test_tactical_mechanics_selector_shoulder_lean()
 	await _test_surface_penetration_and_vfx_lifecycle()
+	await _test_viewmodel_hierarchy_bone_attachments_and_overhaul()
 
 	print("--------------------------------------------")
 	print("TOTAL: %d passed, %d failed" % [_passed, _failed])
 	ProceduralAudio.clear_cache()
+	await process_frame
+	await process_frame
 	quit(0 if _failed == 0 else 1)
 
 
@@ -279,6 +282,7 @@ func _test_rigged_weapon_models_and_animations() -> void:
 
 	var vm := inst.player.camera_rig.viewmodel
 	var wm := inst.player.weapon_manager
+	wm.eject_shells_enabled = false
 
 	# 1. AK-47 FP rigged animations & hand anchors
 	var ak_anims := vm.get_animation_names()
@@ -357,6 +361,7 @@ func _test_tactical_mechanics_selector_shoulder_lean() -> void:
 
 	var p := inst.player
 	var wm := p.weapon_manager
+	wm.eject_shells_enabled = false
 	var rig := p.camera_rig
 	var vm := rig.viewmodel
 	p.scripted_control = true
@@ -455,6 +460,7 @@ func _test_surface_penetration_and_vfx_lifecycle() -> void:
 
 	var p := inst.player
 	var wm := p.weapon_manager
+	wm.eject_shells_enabled = false
 	var space := p.get_world_3d().direct_space_state
 	var ak_stats := wm.get_current_weapon().stats
 	var no_spread := SpreadController.new(77)
@@ -497,6 +503,74 @@ func _test_surface_penetration_and_vfx_lifecycle() -> void:
 		fx.spawn_shot_fx(sum_metal, Color.YELLOW)
 	_assert(fx.get_active_decal_count() <= fx.get_max_decals(), "VFX decal pool enforces strict upper bound (%d <= %d)" % [fx.get_active_decal_count(), fx.get_max_decals()])
 	_assert(fx.get_active_effect_count() <= fx.get_max_effects(), "VFX particle effect tracker enforces strict upper bound (%d <= %d)" % [fx.get_active_effect_count(), fx.get_max_effects()])
+
+	inst.queue_free()
+	await process_frame
+
+
+func _test_viewmodel_hierarchy_bone_attachments_and_overhaul() -> void:
+	var scene := load("res://src/showcase/training_range.tscn") as PackedScene
+	var inst := scene.instantiate() as RangeController
+	root.add_child(inst)
+	await process_frame
+
+	var wm := inst.player.weapon_manager
+	var vm := inst.player.camera_rig.viewmodel
+
+	# Verify clean single-root BoneAttachment3D + bone-skinned modular attachments across all 3 weapons
+	var weapon_names: PackedStringArray = PackedStringArray(["AK-47", "SPAS-12", "AWP"])
+	for slot_idx in 3:
+		wm._equip_slot_immediate(slot_idx)
+		var w_label: String = weapon_names[slot_idx]
+		var skel := vm.get_skeleton()
+		var body_ba := vm.get_body_bone_attachment()
+		_assert(
+			skel != null and body_ba != null and body_ba.get_parent() == skel and body_ba.bone_name == "weapon_body",
+			"%s mounts MuzzlePoint/EjectPoint via BoneAttachment3D bound to 'weapon_body'" % w_label
+		)
+		var att_nodes := vm.get_attachment_nodes()
+		var all_skinned := true
+		for key in ["optic", "muzzle", "magazine", "underbarrel"]:
+			var n: Node = att_nodes.get(key)
+			if not (n is MeshInstance3D and n.get_parent() == skel):
+				all_skinned = false
+		_assert(all_skinned, "%s imports all 4 modular hard-surface attachments as bone-skinned Skeleton3D children (zero floating boxes)" % w_label)
+
+		# Toggle Optic & Extended Mag and confirm imported Blender meshes toggle visibility directly
+		wm.toggle_attachment_by_slot(AttachmentData.Slot.OPTIC)
+		wm.toggle_attachment_by_slot(AttachmentData.Slot.MAGAZINE)
+		var optic_n := att_nodes["optic"] as Node3D
+		var mag_n := att_nodes["magazine"] as Node3D
+		_assert(optic_n.visible and mag_n.visible, "%s toggles imported Blender Att_Optic_Holo and Att_Mag_Ext visibility cleanly" % w_label)
+		wm.toggle_attachment_by_slot(AttachmentData.Slot.OPTIC)
+		wm.toggle_attachment_by_slot(AttachmentData.Slot.MAGAZINE)
+		_assert(not optic_n.visible and not mag_n.visible, "%s hides modular attachments cleanly on unequip" % w_label)
+
+		var anims := vm.get_animation_names()
+		_assert(anims.has("ads_idle"), "%s includes dedicated authored 'ads_idle' animation" % w_label)
+
+	# Verify AK-47 distinguishes tactical 'reload' vs empty 'reload_empty' AND BoneAttachment3D tracks bone motion!
+	wm._equip_slot_immediate(0)
+	await process_frame
+	var rest_muzzle := vm.get_muzzle_global_position()
+	wm.get_current_weapon().current_mag = 0
+	wm.request_reload()
+	_assert(vm.get_current_animation() == "reload_empty", "AK-47 empty magazine triggers dedicated 'reload_empty' animation")
+	for _i in 18:
+		wm.step(0.02, 0.0, false, true, 0.0)
+		await process_frame
+	var reload_muzzle := vm.get_muzzle_global_position()
+	_assert(rest_muzzle.distance_to(reload_muzzle) > 0.04, "BoneAttachment3D MuzzlePoint dynamically tracks animated weapon_body during reload (delta=%.3fm)" % rest_muzzle.distance_to(reload_muzzle))
+
+	# Verify AWP also has dedicated 'reload_empty' and enters ads_idle smoothly when aiming
+	wm._equip_slot_immediate(2)
+	_assert(vm.get_animation_names().has("reload_empty"), "AWP includes dedicated authored 'reload_empty' animation")
+	wm._equip_slot_immediate(0)
+	wm.set_aim_requested(true)
+	for _i in 45:
+		wm.step(0.02, 0.0, false, true, 0.0)
+	_assert(vm.get_current_animation() == "ads_idle", "AK-47 smoothly transitions into authored 'ads_idle' when ADS")
+	wm.set_aim_requested(false)
 
 	inst.queue_free()
 	await process_frame

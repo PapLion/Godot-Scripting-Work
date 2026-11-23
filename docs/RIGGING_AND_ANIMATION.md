@@ -1,93 +1,70 @@
-# 3D Weapon Rigging & Godot Animation Integration
+# 3D Weapon Rigging, Hard-Surface Overhaul & Godot Animation Integration
 
-This document details the Blender 5.3 asset pipeline, bone hierarchies, exported animation clips, and Godot 4.7.2 `AnimationPlayer` synchronization for the three rigged weapons integrated into `01-Advanced-FPS`.
+This document details the **v6 Blender 5.3 hard-surface asset pipeline**, single-root bone hierarchies, bone-skinned modular attachments, smooth Bezier bone-locked first-person hand animations, and Godot 4.7.2 `BoneAttachment3D` / `AnimationPlayer` architecture for `01-Advanced-FPS`.
 
 ---
 
 ## Asset Organization
 
-| Asset | Editable Blender Source | Exported Game Asset | PBR Textures |
+| Asset | Editable Blender Source | Exported Game Asset | 512px PBR Maps (Albedo + Roughness + Normal) |
 | :--- | :--- | :--- | :--- |
 | **Reusable FP Arms Rig** | `assets/hands/source/fps_arms_rig.blend` | `assets/hands/fps_arms.glb` | `assets/weapons/textures/FP_*` |
-| **AK-47 + FP Hands** | `assets/weapons/ak47/source/ak47_fp.blend` (+ `ak47.blend`) | `assets/weapons/ak47/ak47_fp.glb` | `assets/weapons/textures/AK_*`, `FP_*` |
-| **SPAS-12 + FP Hands** | `assets/weapons/spas12/source/spas12_fp.blend` (+ `spas12.blend`) | `assets/weapons/spas12/spas12_fp.glb` | `assets/weapons/textures/SPAS_*`, `FP_*` |
-| **AWP + FP Hands** | `assets/weapons/awp/source/awp_fp.blend` (+ `awp.blend`) | `assets/weapons/awp/awp_fp.glb` | `assets/weapons/textures/AWP_*`, `FP_*` |
+| **AK-47 + FP Hands** | `assets/weapons/ak47/source/ak47_fp.blend` (+ `ak47.blend`) | `assets/weapons/ak47/ak47_fp.glb` | `assets/weapons/textures/AK_*`, `Att_*`, `FP_*` |
+| **SPAS-12 + FP Hands** | `assets/weapons/spas12/source/spas12_fp.blend` (+ `spas12.blend`) | `assets/weapons/spas12/spas12_fp.glb` | `assets/weapons/textures/SPAS_*`, `Att_*`, `FP_*` |
+| **AWP + FP Hands** | `assets/weapons/awp/source/awp_fp.blend` (+ `awp.blend`) | `assets/weapons/awp/awp_fp.glb` | `assets/weapons/textures/AWP_*`, `Att_*`, `FP_*` |
 
-Editable `.blend` sources live in `source/` subfolders with `.gdignore` so Godot imports only optimized `.glb` packages cleanly. Reproducible Blender 5.3 Python generators live in `assets/blender_scripts/` (`fps_arms_rig.py`, `animate_weapons_with_hands.py`, and weapon builders).
-
----
-
-## Reusable First-Person Arms & Tactical Gloves Rig
-
-- **Anatomy & Materials:** Bare muscular forearms, rolled tactical combat sleeves, leather wrist cuffs, olive-drab padded gloves, molded carbon knuckle armor, leather palm pads, and 5 articulated fingers per hand (3 phalanges per finger/thumb = 38 clean deform bones).
-- **Blender Control Rig + Runtime Deform Export:** Editable `.blend` rigs include independent `ik_hand_L/R` and `pole_elbow_L/R` controls with Blender IK constraints, baked cleanly onto deform bones (`export_def_bones=True`) with anatomical forearm supination roll alignment (preventing wrist candy-wrapper pinching).
-- **Hand-to-Weapon Attachment Reference Markers:** Each weapon rig exports configurable `Empty` reference anchors read via `WeaponViewmodel.get_hand_anchors()`: `GripPrimary`, `GripSupport`, `MagInteract`, `BoltInteract`, `ShellPort`, and `ADSRef`.
+Editable `.blend` sources live inside `source/` subfolders with `.gdignore` so Godot imports only optimized `.glb` packages cleanly. Reproducible Blender 5.3 Python generators live in `assets/blender_scripts/` (`weapon_build_utils.py`, `build_ak47.py`, `build_spas12.py`, `build_awp.py`, `fps_arms_rig.py`, and `animate_weapons_with_hands.py`).
 
 ---
 
-## AWP Bolt-Action Gameplay-State Reconciliation
+## Hard-Surface & PBR Material Overhaul (v6)
 
-To ensure the AWP's right-hand bolt-cycling animation matches authentic gameplay readiness:
-- Added `WeaponData.FireMode.BOLT_ACTION` (`[BOLT]`) and `WeaponStateMachine.ActionState.CYCLING_BOLT`.
-- Firing the AWP when rounds remain in the magazine atomically enters `CYCLING_BOLT` for `bolt_cycle_duration` (`0.82s`), exits full scope zoom so the right-hand 4-stage `bolt_action` animation is visible, **blocks the next shot until the bolt cycle finishes**, and supports clean cancellation if the player switches weapons.
-
----
-
-## Coordinate & Rigid Rigging Standards
-
-- **Orientation:** Modeled pointing along `+Y` in Blender → exported via glTF 2.0 (`export_yup=True`) to `-Z` forward in Godot 4.
-- **Zero Unwanted Deformation:** Every moving mechanical component is bound to its bone via a **single-bone rigid vertex group (weight `1.0`)** and `Armature` modifier.
-- **Import Markers:** Each rig includes `Empty` markers (`MuzzlePoint`, `EjectPoint`, `OpticMount`, `MuzzleMount`, `MagMount`, `LaserMount`) read automatically by `WeaponViewmodel` on weapon equip.
+- **512px Procedural Tileable PBR Maps:** `weapon_build_utils.py` generates seamless Albedo, Roughness, and Tangent-Space Normal PNG maps packed directly into each `.blend` / `.glb` (`metal` horizontal machined brushing, `wood` laminated walnut grain, `polymer` fine micro-stipple, `fabric` tactical cordura/ripstop weave, `skin` subtle micro-pores, and tinted `glass`).
+- **Sculpted Hard-Surface Silhouettes (No Boxy Primitives):**
+  - **AK-47:** Vaulted arched stamped-steel dust cover with cross-ribs, low-profile MIL-STD Picatinny rail, lofted laminated walnut buttstock + palm-swell handguards + ergonomic pistol grip, and progressive lofted curved 30-round banana magazine.
+  - **SPAS-12:** Multi-station vaulted receiver, arched ventilated U-channel barrel heatshield, sculpted oval ribbed pump forend, ergonomic pistol grip, flush skeletal folding stock, and glowing fiber-optic front sight.
+  - **AWP:** Rich military olive-drab Accuracy International thumbhole chassis with smooth arched cutout, dark-steel chassis hex fasteners, elevated saddle cheek rest on twin pillars, genuine 8-flute precision free-float barrel, machined 3-port muzzle brake, and variable scope with knurled turrets and mount rings.
 
 ---
 
-## Bone Hierarchies & Exported Animations
+## Coherent Single-Root Hierarchy & Zero Floating Parts
 
-### 1. AK-47 (`AK47_Rig`)
-```
-weapon_root
- └── weapon_body          (receiver, dust cover, wood stock/handguards/grip, barrel, sights)
-      ├── magazine        (curved 30-round steel magazine)
-      ├── charging_handle (bolt carrier + right-side hooked handle)
-      ├── trigger         (curved trigger)
-      ├── selector        (right-side fire selector lever)
-      └── mag_release     (paddle magazine latch)
-```
-**Animations:** `idle`, `fire`, `reload`, `reload_mag_out`, `reload_mag_in`, `equip`, `unequip`.
+A core architectural rule of the v6 overhaul is **strict bone ownership** — attachments and weapon markers are NEVER static siblings of `Skeleton3D`:
 
-### 2. SPAS-12 (`SPAS12_Rig`)
+```text
+WeaponViewmodel (Node3D — Godot owns lightweight outer runtime ADS, sway, bob, recoil, shoulder, lean)
+ └── RuntimeOffsetPivot (Node3D — clean local identity isolator)
+      └── <Imported GLB Scene> (Blender owns all artistic poses, reloads, bolt cycling, shell loading)
+           └── Skeleton3D
+                ├── Weapon Body / Magazine / Bolt / Pump / FP_Arm_L / FP_Arm_R
+                ├── Att_Optic_Holo        (rigidly skinned to `weapon_body` — beveled Holo Reflex + glowing red dot)
+                ├── Att_Muzzle_Comp       (rigidly skinned to `weapon_body` — machined multi-port compensator)
+                ├── Att_Mag_Ext           (rigidly skinned to `magazine` on AK-47/AWP; tubular mag extension on SPAS-12)
+                ├── Att_Underbarrel_Laser (rigidly skinned to `weapon_body` — FDE PEQ laser module + green emitter)
+                └── WeaponBodyBoneAttachment (Godot BoneAttachment3D -> `weapon_body`)
+                     ├── MuzzlePoint (MuzzleFlashMesh + MuzzleFlashLight)
+                     └── EjectPoint  (Shell casing ejection transform)
 ```
-weapon_root
- └── weapon_body          (curved receiver, barrel, mag tube, ventilated heatshield, pistol grip)
-      ├── pump            (ribbed SPAS-12 forend + dual action bars)
-      ├── bolt            (chrome reciprocating bolt)
-      ├── loading_gate    (bottom shell lifter/gate)
-      ├── shell           (12-gauge red/brass shell animated into loading port)
-      ├── trigger         (curved trigger)
-      └── stock           (folding skeletal metal stock)
-```
-**Animations:** `idle`, `fire`, `shell_start`, `shell_insert`, `shell_end`, `reload_interrupt`, `equip`, `unequip`.
 
-### 3. AWP (`AWP_Rig`)
-```
-weapon_root
- └── weapon_body          (olive-drab thumbhole chassis, rubber buttpad, receiver, heavy barrel, brake)
-      ├── bolt            (steel bolt body)
-      │    └── bolt_handle (angled bolt handle + spherical knob for 4-stage lift/pull/push/lock)
-      ├── magazine        (detachable 10-round steel box magazine)
-      ├── trigger         (match trigger)
-      ├── scope           (variable optic + dual rings + tinted lenses)
-      └── bipod           (folding tactical bipod)
-```
-**Animations:** `idle`, `fire` (includes 4-stage bolt cycling), `bolt` (standalone bolt cycle), `reload`, `reload_mag_out`, `reload_mag_in`, `equip`, `unequip`.
+- Because `Att_*` meshes are authored and rigidly skinned directly inside Blender (`weapon_body` / `magazine`), optics, compensators, extended magazines, and lasers stay **100% locked to the animated firearm** across recoil, reloads, ADS, weapon switching, shoulder transitions, and tactical leaning.
+- Because `MuzzlePoint` and `EjectPoint` mount via Godot `BoneAttachment3D` bound to `"weapon_body"`, muzzle flashes and ejected brass/12ga shells always emit accurately from the live animated barrel and ejection port.
+
+---
+
+## Reusable First-Person Arms & Bone-Locked Bezier Animation Pipeline
+
+- **Anatomical FP Arms & Gloves Rig:** Muscular tapered forearms, two-tier rolled combat sleeves, coaxial leather Velcro wrist cuffs, sleek olive ripstop tactical gloves, low-profile molded knuckle armor, and 5 articulated fingers per hand (38 clean deform bones + editable Blender IK/pole controls).
+- **Mathematically Bone-Locked Hand Tracking:** During Blender baking (`animate_weapons_with_hands.py`), weapon mechanical bones are keyframed and Bezier-smoothed first (`AUTO_CLAMPED` F-curves). Both hands then evaluate the exact rigid-body bone delta matrix (`pb.matrix @ rest.matrix_local.inverted()`) at dense sample intervals so hands stay glued with zero drift to `weapon_body`, `magazine`, `pump`, `charging_handle`, `shell`, and `bolt_handle`, with quaternion sign continuity (`make_compatible`) preventing wrist flips.
+- **Camera-Framed Action Choreography (70° FOV):**
+  - **AK-47 (`idle`, `ads_idle`, `fire`, `reload`, `reload_empty`, `equip`, `unequip`):** Distinct tactical reload (curved banana mag rock-out & fresh mag seating cleanly centered in frame) vs. empty reload (mag swap + rifle roll left + underhand chrome charging-handle rack). `selector` bone is left unkeyframed so Godot's `Skeleton3D` rotates the physical selector lever cleanly between `SAFE`, `SEMI`, and `AUTO`.
+  - **SPAS-12 (`idle`, `ads_idle`, `fire`, `shell_start`, `shell_insert`, `shell_end`, `reload_interrupt`, `equip`, `unequip`):** Genuine semi-auto `fire` (chrome bolt reciprocates without contradictory pumping). Shell-by-shell loading elevates and rolls the shotgun cleanly into upper-center frame so the gloved left hand visibly pushes bright red/brass 12-gauge shells into the chrome loading gate, finishing with a left-hand pump rack on `shell_end` (or instant snap-to-ready on `reload_interrupt`).
+  - **AWP (`idle`, `ads_idle`, `fire`, `bolt_action`, `reload`, `reload_empty`, `equip`, `unequip`):** Firing enters `CYCLING_BOLT` (`0.82s`), exits full scope zoom, and elevates/cants the rifle above the HUD so the gloved right hand visibly lifts the spherical bolt knob 68°, pulls the fluted steel bolt back 9.2cm (synchronized with mid-pull `.338` brass casing ejection in `WeaponManager`), drives it forward, and locks it down before allowing the next shot.
 
 ---
 
 ## Godot State Synchronization (`WeaponManager` ↔ `WeaponViewmodel`)
 
-`WeaponManager` drives `WeaponViewmodel` directly from `WeaponStateMachine` transitions:
-- **Fire:** `trigger_fire_kick()` → `play_fire()` (synchronizes AK bolt carrier, SPAS-12 pump/bolt, and AWP 4-stage bolt cycling).
-- **Magazine Reload:** `request_reload()` → `play_reload_magazine(duration)` scales playback speed to match `tactical_reload_duration` or `empty_reload_duration` (including Extended Mag modifiers).
-- **Shell-by-Shell Reload (SPAS-12):** `STARTING` → `play_shell_start()`, each `INSERTING` loop → `play_shell_insert()`, `ENDING` → `play_shell_end()`.
-- **Reload Interruption / Weapon Switch:** `_cancel_reload()` calls `play_reload_interrupt()`, snapping detached magazines/shells back to rest pose before `play_unequip()` or immediate firing.
-- **AWP Scope ADS:** At full ADS (`ads_alpha >= 0.78`), `WeaponViewmodel` hides the 3D sniper mesh while `FPSHud` renders a crisp tactical Mil-Dot scope overlay.
+- **Blender-First Ownership:** Godot no longer runs procedural reload dips or procedural equip drops on rigged weapons. `WeaponViewmodel` applies only lightweight outer runtime transforms (ADS lerp, smooth shoulder-side arc, subtle sway/bob damped during actions, compact recoil kickback, and tactical lean stabilization roll) while `AnimationPlayer` drives all authored mechanical and hand motion.
+- **Automatic `idle` ↔ `ads_idle` Crossfade:** When aiming down sights (`ads_alpha >= 0.65`), `WeaponViewmodel` crossfades cleanly into the stabilized `ads_idle` cheek-weld pose.
+- **Tactical vs. Empty Magazine Reload Selection:** `play_reload_magazine(duration, is_empty)` selects `reload_empty` when reloading from zero rounds and `reload` for tactical reloads, scaling playback speed cleanly to match `EffectiveWeaponStats` durations (including Extended Mag modifiers).
+- **AWP Scope ADS:** At full scope-in (`ads_alpha >= 0.78`), `WeaponViewmodel` hides the 3D sniper mesh while `FPSHud` renders the tactical Mil-Dot scope overlay, automatically re-showing the 3D viewmodel during `CYCLING_BOLT`, reload, and switching.

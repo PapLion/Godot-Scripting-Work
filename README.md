@@ -2,7 +2,7 @@
 
 A modular, reusable, commission-grade **First-Person Shooter Gameplay Framework** built in **Godot 4.7.2 (GDScript)**.
 
-> **The scripting is the product.** Everything else — geometric viewmodels, synthesized audio, and the minimal firing range — exists to verify and demonstrate the underlying gameplay systems.
+> **The scripting is the product.** Every weapon model, first-person arm rig, animation, synthesized audio cue, and range target exists to demonstrate and verify the underlying commission-grade Godot 4 gameplay architecture.
 
 ---
 
@@ -20,10 +20,10 @@ This project is a standalone, single-player FPS gameplay architecture designed s
 | **Gunplay & Ballistics** | `BallisticSolver`, `RecoilController`, `SpreadController` | Camera-based hitscan & multi-pellet shotgun solver, distance falloff, **configurable multi-surface penetration** (thickness + resistance budget + damage retention + entry/exit points), real camera recoil + recovery, stance/movement/bloom spread |
 | **Combat VFX Framework** | `ImpactFXManager`, `WeaponViewmodel`, `ShellCasing` | Centralized quality-scalable (`LOW`/`MEDIUM`/`HIGH`) `GPUParticles3D` + decal framework: multi-layered star muzzle flashes, muzzle/barrel smoke, surface-dependent entry/exit impacts (Metal sparks, Concrete dust/debris, Wood splinters, Glass shards, Drywall plaster), armor/headshot/kill bursts, strict bounded budgets |
 | **Reload Mechanics** | `WeaponManager` | Tactical (+1 chamber) & empty magazine reloads, shell-by-shell shotgun loading with immediate fire-interrupt, safe switch cancellation |
-| **Attachments & Modifiers** | `AttachmentData`, `EffectiveWeaponStats` | 4 slots (Optic, Muzzle, Magazine, Underbarrel) with live stat recalculation, ammo conservation, and visual viewmodel indicators |
+| **Attachments & Modifiers** | `AttachmentData`, `EffectiveWeaponStats`, `WeaponViewmodel` | 4 slots (Optic, Muzzle, Magazine, Underbarrel) with live stat recalculation, ammo conservation, and **bone-skinned Blender hard-surface attachment meshes** (`Att_*`) that never detach or float during animations |
 | **Decoupled Damage & Hitboxes** | `HealthComponent`, `HitboxComponent`, `TargetDummy` | Head/Body/Limb hit zones with configurable multipliers, armor absorption & drain, death/reset signals, static/armored/moving targets |
 | **FPS Controller & Camera Rig** | `FPSPlayer`, `FPSCameraRig` | Walk, sprint, jump, smooth crouch with ceiling raycast check, ADS sensitivity scaling, FOV interpolation, landing impulse |
-| **Feedback, Audio & Range** | `WeaponViewmodel`, `ImpactFXManager`, `ProceduralAudio`, `FPSHud` | Procedural 3D viewmodels, muzzle flash, tracers, shell casings, surface-dependent impacts (Concrete/Metal/Wood/Flesh), synthesized WAV audio, dynamic spread crosshair & hitmarkers |
+| **Viewmodels, Feedback & Audio** | `WeaponViewmodel`, `ImpactFXManager`, `ProceduralAudio`, `FPSHud` | Sculpted hard-surface Blender 5.3 weapons (512px PBR Albedo+Roughness+Normal), anatomical gloved FP arms, bone-locked Bezier animations (`idle`, `ads_idle`, `reload`, `reload_empty`, `shell_*`, `bolt_action`), `BoneAttachment3D` muzzle/eject points, synthesized WAV audio, dynamic crosshair & hitmarkers |
 
 ---
 
@@ -89,7 +89,7 @@ Open `project.godot` in Godot 4.7.2 and press **F5** (main scene: `res://src/sho
 Godot_v4.7.2-stable_win64_console.exe --path .
 ```
 
-### Run Automated Deterministic Test Suite (48 Assertions)
+### Run Automated Deterministic Test Suite (106 Assertions)
 ```powershell
 Godot_v4.7.2-stable_win64_console.exe --headless --path . --script res://tests/run_tests.gd
 ```
@@ -108,7 +108,7 @@ Godot_v4.7.2-stable_win64_console.exe --headless --path . --script res://tests/r
 ## Testing & Verification Summary
 
 - **Static Validation (`validate_scripts`):** 27/27 GDScript files valid, 0 errors.
-- **Automated Suite (`tests/run_tests.gd`):** **87/87 passed**, covering resource loading, distance falloff, attachment stat composition & ammo conservation, state-machine invariants, framerate-independent recoil/spread recovery (60 vs 120 FPS), armor/hitbox multipliers, tactical/empty/shell-by-shell reloads, fire-interrupt, weapon switching, scene instantiation, rigged GLB weapon+hand animations, configurable hand attachment markers, AWP `BOLT_ACTION` / `CYCLING_BOLT` readiness enforcement, AK-47 `SAFE`/`SEMI`/`AUTO` fire selector, smooth Right/Left shoulder switching, collision-aware `Q`/`E` tactical leaning, multi-surface bullet penetration (wood/glass/drywall vs thick concrete/metal), and bounded VFX lifecycle budgets.
+- **Automated Suite (`tests/run_tests.gd`):** **106/106 passed (0 errors, 0 leaks)**, covering resource loading, distance falloff, attachment stat composition & ammo conservation, state-machine invariants, framerate-independent recoil/spread recovery (60 vs 120 FPS), armor/hitbox multipliers, tactical/empty/shell-by-shell reloads, fire-interrupt, weapon switching, scene instantiation, rigged GLB weapon+hand animations (`idle`, `ads_idle`, `fire`, `reload`, `reload_empty`, `shell_*`, `bolt_action`, `equip`, `unequip`), `BoneAttachment3D` dynamic muzzle/eject transform inheritance, bone-skinned `Skeleton3D` modular attachment visibility & hierarchy, AWP `BOLT_ACTION` / `CYCLING_BOLT` readiness enforcement, AK-47 `SAFE`/`SEMI`/`AUTO` fire selector, smooth Right/Left shoulder switching, collision-aware `Q`/`E` tactical leaning, multi-surface bullet penetration (wood/glass/drywall vs thick concrete/metal), and bounded VFX lifecycle budgets.
 - **Live Engine Verification (Godot MCP `run_project` + `game_eval` + `game_screenshot`):** Verified zero runtime errors under Vulkan Forward+, real raycast headshots (`2.0x`), armor absorption (`50%` split), multi-pellet shotgun hits, high-zoom precision ADS, and live attachment toggling.
 
 ---
@@ -117,5 +117,5 @@ Godot_v4.7.2-stable_win64_console.exe --headless --path . --script res://tests/r
 
 - **Single-player only:** No multiplayer replication, authoritative server reconciliation, or lag compensation (intentionally out of scope).
 - **Hitscan ballistics:** Uses camera-based hitscan raycasting with effective range & falloff; physical projectile drop/travel time is intentionally excluded unless required by a specific game design.
-- **Minimal visual assets:** Viewmodels, targets, and range geometry use clean primitives and synthesized procedural audio to keep focus on gameplay engineering.
+- **Focused environment art:** The training range and targets use clean color-coded blocks and synthesized procedural audio so visual attention stays on the hard-surface weapons, first-person animations, and gameplay systems.
 - **No AI/parkour/inventory systems:** Advanced movement (wallrunning/vaulting) and enemy AI are reserved for separate Godot Systems Lab modules.
