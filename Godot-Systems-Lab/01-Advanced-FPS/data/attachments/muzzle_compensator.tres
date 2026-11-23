@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AttachmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/weapons/resources/attachment_data.gd" id="1_ad"]
+
+[resource]
+script = ExtResource("1_ad")
+attachment_id = &"muzzle_compensator"
+display_name = "Compensator"
+slot = 1
+short_description = "-32% Vert Recoil, -25% Horiz Recoil, +8% Range"
+damage_multiplier = 1.0
+effective_range_multiplier = 1.08
+recoil_vertical_multiplier = 0.68
+recoil_horizontal_multiplier = 0.75
+hip_spread_multiplier = 1.0
+ads_spread_multiplier = 1.0
+move_spread_multiplier = 1.0
+magazine_capacity_multiplier = 1.0
+magazine_capacity_bonus = 0
+reload_duration_multiplier = 1.0
+ads_fov_offset = 0.0
+ads_speed_multiplier = 1.0
+ads_y_offset = 0.0

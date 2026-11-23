@@ -1,0 +1,65 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/weapons/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="PackedScene" path="res://assets/weapons/spas12/spas12_fp.glb" id="2_spas12"]
+
+[resource]
+script = ExtResource("1_wd")
+weapon_id = &"sg_m870_tactical"
+display_name = "SPAS-12"
+visual_preset = 1
+viewmodel_scene = ExtResource("2_spas12")
+accent_color = Color(0.28, 0.22, 0.18, 1)
+base_damage = 18.0
+pellets_per_shot = 8
+fire_rate_rpm = 72.0
+supported_fire_modes = Array[int]([0])
+burst_count = 1
+effective_range = 14.0
+max_falloff_range = 38.0
+min_falloff_multiplier = 0.35
+max_ray_distance = 90.0
+impact_impulse = 3.2
+penetration_power = 1.15
+max_penetrations = 2
+magazine_capacity = 6
+starting_reserve_ammo = 36
+max_reserve_ammo = 48
+reload_type = 1
+tactical_reload_duration = 1.5
+empty_reload_duration = 2.0
+shell_reload_start_duration = 0.30
+shell_reload_insert_duration = 0.38
+shell_reload_end_duration = 0.28
+allow_tactical_plus_one = false
+equip_duration = 0.36
+unequip_duration = 0.24
+base_hip_spread_deg = 3.80
+base_ads_spread_deg = 2.35
+move_spread_penalty_deg = 1.20
+air_spread_penalty_deg = 2.40
+crouch_spread_multiplier = 0.85
+spread_per_shot_deg = 1.15
+max_bloom_spread_deg = 4.5
+spread_recovery_rate_deg = 5.5
+recoil_vertical_kick_deg = 3.60
+recoil_horizontal_spread_deg = 0.95
+recoil_ads_multiplier = 0.78
+recoil_crouch_multiplier = 0.82
+recoil_sustained_scale = 0.08
+recoil_max_pitch_deg = 16.0
+recoil_snap_speed = 16.0
+recoil_recovery_speed = 7.5
+recoil_recovery_delay = 0.14
+viewmodel_kickback_z = 0.085
+viewmodel_kick_pitch_deg = 7.5
+ads_fov = 62.0
+ads_transition_speed = 9.5
+ads_sensitivity_multiplier = 0.72
+hip_position = Vector3(0.20, -0.18, -0.35)
+ads_position = Vector3(0.0, -0.072, -0.26)
+sprint_position = Vector3(0.16, -0.24, -0.31)
+sprint_rotation_deg = Vector3(-18.0, 28.0, -10.0)
+fire_sound_id = &"shot_shotgun"
+eject_shell_color = Color(0.82, 0.16, 0.14, 1)
+tracer_color = Color(1.0, 0.76, 0.38, 1)

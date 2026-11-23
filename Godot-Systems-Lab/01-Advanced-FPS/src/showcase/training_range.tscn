@@ -1,0 +1,46 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://src/showcase/range_controller.gd" id="1_rc"]
+[ext_resource type="PackedScene" path="res://src/player/fps_player.tscn" id="2_player"]
+[ext_resource type="Script" path="res://src/effects/impact_fx_manager.gd" id="3_fx"]
+[ext_resource type="PackedScene" path="res://src/ui/fps_hud.tscn" id="4_hud"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat_range"]
+sky_top_color = Color(0.24, 0.44, 0.68, 1)
+sky_horizon_color = Color(0.68, 0.76, 0.84, 1)
+ground_bottom_color = Color(0.18, 0.20, 0.23, 1)
+ground_horizon_color = Color(0.55, 0.59, 0.63, 1)
+
+[sub_resource type="Sky" id="Sky_range"]
+sky_material = SubResource("SkyMat_range")
+
+[sub_resource type="Environment" id="Env_range"]
+background_mode = 2
+sky = SubResource("Sky_range")
+ambient_light_source = 3
+ambient_light_energy = 0.75
+tonemap_mode = 2
+ssao_enabled = true
+
+[node name="TrainingRange" type="Node3D"]
+script = ExtResource("1_rc")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_range")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 14, 0)
+light_energy = 1.25
+shadow_enabled = true
+
+[node name="RangeGeometry" type="Node3D" parent="."]
+
+[node name="Targets" type="Node3D" parent="."]
+
+[node name="ImpactFXManager" type="Node3D" parent="."]
+script = ExtResource("3_fx")
+
+[node name="FPSPlayer" parent="." instance=ExtResource("2_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 6)
+
+[node name="FPSHud" parent="." instance=ExtResource("4_hud")]
